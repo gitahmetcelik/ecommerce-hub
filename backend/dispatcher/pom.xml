@@ -22,5 +22,9 @@
             <groupId>com.ecommercehub</groupId>
             <artifactId>hub-domain</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.gorevplatformu</groupId>
+            <artifactId>motor-spring-starter</artifactId>
+        </dependency>
     </dependencies>
 </project>
