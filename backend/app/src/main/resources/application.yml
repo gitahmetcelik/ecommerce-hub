@@ -1,0 +1,42 @@
+server:
+  port: ${APP_SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ecommerce-hub
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ecommerce_hub_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      pool-name: HubHikariPool
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.default_schema: hub
+      hibernate.format_sql: true
+
+  flyway:
+    enabled: true
+    # Single Flyway chain for both the task engine's own migrations (V1-V5, unqualified
+    # table names, e.g. "CREATE TABLE gorevler") and ours (V1000+, always schema-qualified,
+    # e.g. "CREATE TABLE hub.organization"). One shared history table, one migration run —
+    # see plan §1.4. default-schema must stay "motor" because only the engine's migrations
+    # rely on it to resolve unqualified table names; ours never do.
+    locations: classpath:db/motor-migration,classpath:db/migration/hub
+    schemas: motor,hub
+    default-schema: motor
+    table: flyway_schema_history
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

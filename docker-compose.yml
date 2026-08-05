@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecommerce-hub-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ecommerce_hub_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    restart: unless-stopped
+
+  rabbitmq:
+    # The task engine's scheduled-task topology needs the x-delayed-message
+    # exchange type, which the plain rabbitmq image does not ship.
+    image: heidiks/rabbitmq-delayed-message-exchange:3.13.0-management
+    container_name: ecommerce-hub-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    restart: unless-stopped
