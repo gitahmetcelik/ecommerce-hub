@@ -5,3 +5,4 @@ target/
 .vscode/
 .mvn/wrapper/maven-wrapper.jar
 *.log
+node_modules/
