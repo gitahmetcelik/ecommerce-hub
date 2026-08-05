@@ -1,11 +1,15 @@
 package com.ecommercehub.app.internalscreen;
 
+import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.tenant.TenantContextService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,11 +27,14 @@ public class InternalScreenController {
     private final TenantContextService tenantContextService;
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
+    private final CatalogMatchingService catalogMatchingService;
 
-    public InternalScreenController(TenantContextService tenantContextService, JdbcTemplate jdbcTemplate) {
+    public InternalScreenController(TenantContextService tenantContextService, JdbcTemplate jdbcTemplate,
+                                     CatalogMatchingService catalogMatchingService) {
         this.tenantContextService = tenantContextService;
         this.jdbcTemplate = jdbcTemplate;
         this.namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
+        this.catalogMatchingService = catalogMatchingService;
     }
 
     @GetMapping("/internal/orders")
@@ -95,6 +102,31 @@ public class InternalScreenController {
                 LEFT JOIN motor.gorevler g ON g.id = wb.task_id
                 ORDER BY wb.created_at DESC LIMIT 200
                 """);
+    }
+
+    /** plan Faz 3: the operator matching screen — every PENDING mapping_candidate awaiting a human decision. */
+    @GetMapping("/internal/mapping-candidates")
+    @Transactional
+    public List<Map<String, Object>> mappingCandidates(@RequestParam UUID organizationId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        return jdbcTemplate.queryForList("""
+                SELECT id, channel_connection_id, channel_product_id, channel_variant_id, barcode, title,
+                       candidate_variant_ids, status, created_at
+                FROM hub.mapping_candidate WHERE status = 'PENDING' ORDER BY created_at LIMIT 200
+                """);
+    }
+
+    public record ResolveMappingRequest(UUID variantId, UUID userId) {
+    }
+
+    @PostMapping("/internal/mapping-candidates/{candidateId}/resolve")
+    @Transactional
+    public Map<String, Object> resolveMappingCandidate(@PathVariable UUID candidateId,
+                                                         @RequestParam UUID organizationId,
+                                                         @RequestBody ResolveMappingRequest request) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        catalogMatchingService.resolveManually(candidateId, request.variantId(), request.userId());
+        return Map.of("resolved", true);
     }
 
     /** motor.olu_mektup_kutusu has no organization_id (plan §1.1) — this is a system-wide view, not org-scoped. */

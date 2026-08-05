@@ -1,0 +1,182 @@
+package com.ecommercehub.app;
+
+import com.ecommercehub.domain.catalog.CatalogMatchingService;
+import com.ecommercehub.domain.order.OrderEventPayload;
+import com.ecommercehub.domain.order.OrderItemStatus;
+import com.ecommercehub.domain.order.OrderProcessingService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * plan Faz 3 gate: unmatched catalog items never silently vanish, stock is never
+ * touched for them, and SKU is always tried before barcode.
+ */
+@SpringBootTest
+public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
+
+    @Autowired
+    private CatalogMatchingService catalogMatchingService;
+
+    @Autowired
+    private OrderProcessingService orderProcessingService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private UUID orgId;
+    private UUID channelConnectionId;
+
+    @BeforeEach
+    void setUp() {
+        orgId = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO hub.organization (id, name) VALUES (?, ?)", orgId, "Org");
+        channelConnectionId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO hub.channel_connection (id, organization_id, channel_type, encrypted_credentials)
+                VALUES (?, ?, 'MOCK', 'n/a')
+                """, channelConnectionId, orgId);
+    }
+
+    private UUID seedVariant(String sku, String barcode) {
+        UUID productId = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO hub.product (id, organization_id, title) VALUES (?, ?, ?)", productId, orgId, sku);
+        UUID variantId = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO hub.variant (id, organization_id, product_id, sku, barcode) VALUES (?, ?, ?, ?, ?)",
+                variantId, orgId, productId, sku, barcode);
+        return variantId;
+    }
+
+    @Test
+    @DisplayName("Faz 3 gate: a completely unmatched item is queued for review, not silently dropped, and touches no stock")
+    void unmatchedItemIsQueuedNotDropped() {
+        OrderEventPayload event = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
+                "CO-" + UUID.randomUUID(), Instant.now(), 1L, new BigDecimal("19.99"), "USD",
+                List.of(new OrderEventPayload.OrderEventItem("UNKNOWN-SKU", "cp-1", "cv-1", null,
+                        1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CREATED)),
+                UUID.randomUUID().toString());
+
+        orderProcessingService.process(event);
+
+        Integer candidateCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.mapping_candidate WHERE organization_id = ? AND channel_variant_id = 'cv-1'",
+                Integer.class, orgId);
+        assertThat(candidateCount).isEqualTo(1);
+
+        Integer operatorQueueCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.operator_queue WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM'",
+                Integer.class, orgId);
+        assertThat(operatorQueueCount).isEqualTo(1);
+
+        Integer orderItemCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.order_item WHERE organization_id = ?", Integer.class, orgId);
+        assertThat(orderItemCount)
+                .withFailMessage("No variant_id exists for an unmatched item — no order_item can be created for it")
+                .isZero();
+
+        Integer stockRowCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.stock WHERE organization_id = ?", Integer.class, orgId);
+        assertThat(stockRowCount).withFailMessage("Faz 3 gate: stock must never be touched for an unmatched item").isZero();
+    }
+
+    @Test
+    @DisplayName("Faz 3 gate: the same unmatched item seen twice queues exactly one review row, not two")
+    void repeatedUnmatchedItemDoesNotDuplicateTheReviewRow() {
+        for (int i = 0; i < 2; i++) {
+            OrderEventPayload event = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
+                    "CO-" + UUID.randomUUID(), Instant.now(), 1L, new BigDecimal("19.99"), "USD",
+                    List.of(new OrderEventPayload.OrderEventItem("UNKNOWN-SKU", "cp-2", "cv-2", null,
+                            1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CREATED)),
+                    UUID.randomUUID().toString());
+            orderProcessingService.process(event);
+        }
+
+        Integer candidateCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.mapping_candidate WHERE organization_id = ? AND channel_variant_id = 'cv-2'",
+                Integer.class, orgId);
+        assertThat(candidateCount).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Faz 3 gate: SKU match wins even when a different variant also has a matching barcode")
+    void skuMatchIsTriedBeforeBarcode() {
+        UUID byBarcode = seedVariant("OTHER-SKU", "SHARED-BARCODE");
+        UUID bySku = seedVariant("MATCH-ME", "DIFFERENT-BARCODE");
+
+        CatalogMatchingService.MatchResult result = catalogMatchingService.resolve(
+                orgId, channelConnectionId, "cp", "cv-sku-test", "MATCH-ME", "SHARED-BARCODE", "title");
+
+        assertThat(result.matched()).isTrue();
+        assertThat(result.variantId()).isEqualTo(bySku);
+    }
+
+    @Test
+    @DisplayName("Faz 3 gate: exactly one variant with a matching barcode auto-resolves via AUTO_BARCODE")
+    void singleBarcodeMatchAutoResolves() {
+        UUID variantId = seedVariant("BARCODE-ONLY-SKU", "UNIQUE-BARCODE-1");
+
+        CatalogMatchingService.MatchResult result = catalogMatchingService.resolve(
+                orgId, channelConnectionId, "cp", "cv-barcode-test", "NO-SUCH-SKU", "UNIQUE-BARCODE-1", "title");
+
+        assertThat(result.matched()).isTrue();
+        assertThat(result.variantId()).isEqualTo(variantId);
+
+        String source = jdbcTemplate.queryForObject(
+                "SELECT mapping_source FROM hub.channel_product_mapping WHERE channel_variant_id = 'cv-barcode-test'",
+                String.class);
+        assertThat(source).isEqualTo("AUTO_BARCODE");
+    }
+
+    @Test
+    @DisplayName("Faz 3 gate: two variants sharing a barcode is ambiguous — queued for review, not guessed at")
+    void ambiguousBarcodeMatchIsQueuedNotGuessed() {
+        seedVariant("SKU-1", "SHARED-AMBIGUOUS");
+        seedVariant("SKU-2", "SHARED-AMBIGUOUS");
+
+        CatalogMatchingService.MatchResult result = catalogMatchingService.resolve(
+                orgId, channelConnectionId, "cp", "cv-ambiguous", "NO-MATCH-SKU", "SHARED-AMBIGUOUS", "title");
+
+        assertThat(result.matched()).isFalse();
+
+        Map<String, Object> candidate = jdbcTemplate.queryForMap(
+                "SELECT candidate_variant_ids FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-ambiguous'");
+        assertThat(candidate.get("candidate_variant_ids")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Faz 3 gate: an operator resolving a mapping_candidate by hand creates a MANUAL mapping and an audit entry")
+    void manualResolutionCreatesMappingAndAuditEntry() {
+        UUID variantId = seedVariant("MANUAL-TARGET-SKU", null);
+        UUID userId = UUID.randomUUID();
+
+        catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-manual", "NO-MATCH", null, "title");
+        UUID candidateId = jdbcTemplate.queryForObject(
+                "SELECT id FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-manual'", UUID.class);
+
+        catalogMatchingService.resolveManually(candidateId, variantId, userId);
+
+        String mappedVariant = jdbcTemplate.queryForObject(
+                "SELECT variant_id::text FROM hub.channel_product_mapping WHERE channel_variant_id = 'cv-manual'", String.class);
+        assertThat(mappedVariant).isEqualTo(variantId.toString());
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.mapping_candidate WHERE id = ?", String.class, candidateId);
+        assertThat(status).isEqualTo("RESOLVED");
+
+        Integer auditCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.audit_log WHERE organization_id = ? AND action = 'CATALOG_MAPPING_RESOLVED'",
+                Integer.class, orgId);
+        assertThat(auditCount).isEqualTo(1);
+    }
+}

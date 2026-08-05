@@ -18,7 +18,14 @@ public record OrderEventPayload(UUID organizationId, UUID channelConnectionId, S
                                  String channelOrderNumber, Instant channelEventAt, Long channelEventSequence,
                                  BigDecimal total, String currency, List<OrderEventItem> items, String traceId) {
 
-    public record OrderEventItem(String sku, int quantity, BigDecimal unitPrice, BigDecimal vatRate,
+    /**
+     * channelProductId/channelVariantId/barcode feed catalog matching (plan §3/Faz 3)
+     * — sku alone is not always what the channel uses as its own stable identifier.
+     * A caller that only has a sku (no separate channel-side id) may pass sku for
+     * channelVariantId/channelProductId too; barcode is optional.
+     */
+    public record OrderEventItem(String sku, String channelProductId, String channelVariantId, String barcode,
+                                  int quantity, BigDecimal unitPrice, BigDecimal vatRate,
                                   OrderItemStatus targetStatus) {
     }
 }

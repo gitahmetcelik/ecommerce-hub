@@ -26,9 +26,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (§3), and derived-status recomputation, exercised directly against
  * OrderProcessingService (no HTTP/engine hop — see IngestGateTests for the outbox
  * plumbing that feeds this in production).
+ *
+ * <p>Since Faz 3, order processing routes SKUs through CatalogMatchingService
+ * (plan §3) instead of auto-creating a variant — every SKU this suite exercises is
+ * pre-seeded as an existing variant in setUp() so the SKU-match path resolves it,
+ * matching what "an already-catalogued item" looks like in production. Faz 3's own
+ * gate tests cover the unmatched path (mapping_candidate, operator queue).
  */
 @SpringBootTest
 public class OrderProcessingGateTests extends AbstractTestcontainersTest {
+
+    private static final List<String> SEEDED_SKUS = List.of("SKU-A", "SKU-B", "SKU-X", "SKU-Y", "SKU-Z");
 
     @Autowired
     private OrderProcessingService orderProcessingService;
@@ -51,13 +59,27 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
                 INSERT INTO hub.channel_connection (id, organization_id, channel_type, encrypted_credentials)
                 VALUES (?, ?, 'MOCK', 'n/a')
                 """, channelConnectionId, orgId);
+
+        for (String sku : SEEDED_SKUS) {
+            seedVariant(sku);
+        }
+    }
+
+    private void seedVariant(String sku) {
+        UUID productId = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO hub.product (id, organization_id, title) VALUES (?, ?, ?)", productId, orgId, sku);
+        jdbcTemplate.update("INSERT INTO hub.variant (id, organization_id, product_id, sku) VALUES (?, ?, ?, ?)",
+                UUID.randomUUID(), orgId, productId, sku);
+    }
+
+    private OrderEventPayload.OrderEventItem item(String sku, OrderItemStatus target) {
+        return new OrderEventPayload.OrderEventItem(sku, sku, sku, null, 1, new BigDecimal("19.99"), BigDecimal.ZERO, target);
     }
 
     private OrderEventPayload singleItemEvent(String orderNumber, String sku, OrderItemStatus target,
                                                Long sequence, Instant eventAt) {
         return new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(), orderNumber,
-                eventAt, sequence, new BigDecimal("19.99"), "USD",
-                List.of(new OrderEventPayload.OrderEventItem(sku, 1, new BigDecimal("19.99"), BigDecimal.ZERO, target)),
+                eventAt, sequence, new BigDecimal("19.99"), "USD", List.of(item(sku, target)),
                 UUID.randomUUID().toString());
     }
 
@@ -146,16 +168,13 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
 
         OrderEventPayload createAll = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
                 orderNumber, t0, 1L, new BigDecimal("59.97"), "USD",
-                List.of(
-                        new OrderEventPayload.OrderEventItem("SKU-X", 1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CREATED),
-                        new OrderEventPayload.OrderEventItem("SKU-Y", 1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CREATED),
-                        new OrderEventPayload.OrderEventItem("SKU-Z", 1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CREATED)),
+                List.of(item("SKU-X", OrderItemStatus.CREATED), item("SKU-Y", OrderItemStatus.CREATED), item("SKU-Z", OrderItemStatus.CREATED)),
                 UUID.randomUUID().toString());
         orderProcessingService.process(createAll);
 
         OrderEventPayload cancelOne = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
                 orderNumber, t0.plusSeconds(10), 2L, new BigDecimal("59.97"), "USD",
-                List.of(new OrderEventPayload.OrderEventItem("SKU-X", 1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CANCELLED)),
+                List.of(item("SKU-X", OrderItemStatus.CANCELLED)),
                 UUID.randomUUID().toString());
         orderProcessingService.process(cancelOne);
 

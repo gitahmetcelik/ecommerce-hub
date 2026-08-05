@@ -66,4 +66,12 @@ public class Variant {
     public String getSku() {
         return sku;
     }
+
+    public String getBarcode() {
+        return barcode;
+    }
+
+    public void setBarcode(String barcode) {
+        this.barcode = barcode;
+    }
 }

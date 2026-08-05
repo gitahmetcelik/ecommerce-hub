@@ -6,7 +6,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -38,6 +40,11 @@ public class ChannelConnection {
 
     @Column(name = "next_reconcile_at")
     private Instant nextReconcileAt;
+
+    /** plan Faz 3: the resumable backfill cursor — absent/null means "never started". */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "backfill_status")
+    private String backfillStatus;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -87,5 +94,13 @@ public class ChannelConnection {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getBackfillStatus() {
+        return backfillStatus;
+    }
+
+    public void setBackfillStatus(String backfillStatus) {
+        this.backfillStatus = backfillStatus;
     }
 }

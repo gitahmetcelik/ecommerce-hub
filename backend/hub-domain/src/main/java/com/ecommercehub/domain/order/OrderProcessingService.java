@@ -1,7 +1,6 @@
 package com.ecommercehub.domain.order;
 
-import com.ecommercehub.domain.catalog.CatalogResolver;
-import com.ecommercehub.domain.catalog.Variant;
+import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.stock.StockLedgerService;
 import com.ecommercehub.domain.stock.StockReservation;
 import com.ecommercehub.domain.stock.StockReservationRepository;
@@ -34,19 +33,19 @@ public class OrderProcessingService {
 
     private final SalesOrderRepository salesOrderRepository;
     private final OrderItemRepository orderItemRepository;
-    private final CatalogResolver catalogResolver;
+    private final CatalogMatchingService catalogMatchingService;
     private final StockLedgerService stockLedgerService;
     private final StockReservationRepository stockReservationRepository;
     private final JdbcTemplate jdbcTemplate;
     private final TenantContextService tenantContextService;
 
     public OrderProcessingService(SalesOrderRepository salesOrderRepository, OrderItemRepository orderItemRepository,
-                                   CatalogResolver catalogResolver, StockLedgerService stockLedgerService,
+                                   CatalogMatchingService catalogMatchingService, StockLedgerService stockLedgerService,
                                    StockReservationRepository stockReservationRepository, JdbcTemplate jdbcTemplate,
                                    TenantContextService tenantContextService) {
         this.salesOrderRepository = salesOrderRepository;
         this.orderItemRepository = orderItemRepository;
-        this.catalogResolver = catalogResolver;
+        this.catalogMatchingService = catalogMatchingService;
         this.stockLedgerService = stockLedgerService;
         this.stockReservationRepository = stockReservationRepository;
         this.jdbcTemplate = jdbcTemplate;
@@ -70,9 +69,25 @@ public class OrderProcessingService {
 
         List<String> deferred = new ArrayList<>();
         for (OrderEventPayload.OrderEventItem incoming : event.items()) {
-            Variant variant = catalogResolver.resolveOrCreateBySku(event.organizationId(), incoming.sku(), incoming.sku());
-            OrderItem item = orderItemRepository.findBySalesOrderIdAndVariantId(order.getId(), variant.getId())
-                    .orElseGet(() -> createItem(order, variant, incoming));
+            CatalogMatchingService.MatchResult match = catalogMatchingService.resolve(
+                    event.organizationId(), event.channelConnectionId(),
+                    incoming.channelProductId() != null ? incoming.channelProductId() : incoming.sku(),
+                    incoming.channelVariantId() != null ? incoming.channelVariantId() : incoming.sku(),
+                    incoming.sku(), incoming.barcode(), incoming.sku());
+
+            if (!match.matched()) {
+                // plan Faz 3 gate: unmatched items never touch stock and never silently
+                // vanish — CatalogMatchingService already queued it for operator review;
+                // there is no variant_id to create an order_item against (NOT NULL FK),
+                // so this item is simply absent from the order until someone resolves it.
+                log.info("Skipping unmatched item sku={} for order {} — queued for catalog review",
+                        incoming.sku(), event.channelOrderNumber());
+                continue;
+            }
+
+            UUID variantId = match.variantId();
+            OrderItem item = orderItemRepository.findBySalesOrderIdAndVariantId(order.getId(), variantId)
+                    .orElseGet(() -> createItem(order, variantId, incoming));
 
             OrderItemTransitionDecision.Decision decision = OrderItemTransitionDecision.decide(
                     item.getStatus(), currentSequence, currentEventAt,
@@ -109,14 +124,14 @@ public class OrderProcessingService {
                         Instant.EPOCH, null, event.total(), event.currency())));
     }
 
-    private OrderItem createItem(SalesOrder order, Variant variant, OrderEventPayload.OrderEventItem incoming) {
+    private OrderItem createItem(SalesOrder order, UUID variantId, OrderEventPayload.OrderEventItem incoming) {
         OrderItem item = orderItemRepository.save(new OrderItem(
-                UUID.randomUUID(), order.getOrganizationId(), order.getId(), variant.getId(),
+                UUID.randomUUID(), order.getOrganizationId(), order.getId(), variantId,
                 incoming.quantity(), incoming.unitPrice(), incoming.vatRate() == null ? java.math.BigDecimal.ZERO : incoming.vatRate()));
 
-        stockLedgerService.recordReservedIncrease(order.getOrganizationId(), variant.getId(), incoming.quantity(), item.getId());
+        stockLedgerService.recordReservedIncrease(order.getOrganizationId(), variantId, incoming.quantity(), item.getId());
         stockReservationRepository.save(new StockReservation(
-                UUID.randomUUID(), order.getOrganizationId(), item.getId(), variant.getId(), incoming.quantity(),
+                UUID.randomUUID(), order.getOrganizationId(), item.getId(), variantId, incoming.quantity(),
                 Instant.now().plus(RESERVATION_HOLD_HOURS, ChronoUnit.HOURS)));
 
         return item;

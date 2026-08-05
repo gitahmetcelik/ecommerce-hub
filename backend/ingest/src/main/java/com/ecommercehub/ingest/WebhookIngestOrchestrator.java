@@ -97,7 +97,11 @@ public class WebhookIngestOrchestrator {
 
         List<OrderEventPayload.OrderEventItem> items = envelope.order().items().stream()
                 .map(item -> new OrderEventPayload.OrderEventItem(
-                        item.sku(), item.quantity(), item.unitPrice(),
+                        item.sku(),
+                        item.channelProductId() != null ? item.channelProductId() : item.sku(),
+                        item.channelVariantId() != null ? item.channelVariantId() : item.sku(),
+                        item.barcode(),
+                        item.quantity(), item.unitPrice(),
                         item.vatRate() == null ? BigDecimal.ZERO : item.vatRate(),
                         item.targetStatus() == null ? defaultTarget : OrderItemStatus.valueOf(item.targetStatus())))
                 .toList();
