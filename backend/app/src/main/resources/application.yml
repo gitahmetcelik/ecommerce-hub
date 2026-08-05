@@ -57,3 +57,15 @@ hub:
     processing-timeout-seconds: 120
     cycle-period-ms: 1000
     sweep-period-ms: 5000
+
+  retention:
+    motor-task-retention-days-default: 30
+    raw-event-retention-days: 90
+    raw-event-partitions-ahead-months: 2
+    cron: "0 30 2 * * *"
+
+  security:
+    # Dev/test-only default key — production MUST override via env, never rely on this.
+    current-key-version: ${HUB_CREDENTIAL_KEY_VERSION:1}
+    credential-keys:
+      1: ${HUB_CREDENTIAL_KEY_V1:frIZ4jFakfx2Wx7dSMuRUJkR0JGwhynIrnKtqPfRnd8=}

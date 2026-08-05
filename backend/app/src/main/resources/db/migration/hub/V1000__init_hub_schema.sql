@@ -420,8 +420,15 @@ CREATE TABLE hub.channel_push (
 -- =============================================================================
 -- 10. EVENT & AUDIT
 -- =============================================================================
+-- Monthly-partitioned (plan §3): 90-day retention is a partition DROP, not a
+-- row-by-row DELETE — the whole reason to partition an append-only audit trail.
+-- A unique/primary key on a partitioned table must include the partition key
+-- column (received_at) — a Postgres requirement, not a design choice; duplicate
+-- webhook detection (plan §4.1) is therefore exact within a partition and only
+-- approximate across a month boundary, an accepted tradeoff for redelivered
+-- webhooks which arrive within seconds/minutes, never months apart.
 CREATE TABLE hub.raw_event (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES hub.organization(id),
     channel_connection_id UUID NOT NULL REFERENCES hub.channel_connection(id),
     channel_event_id TEXT NOT NULL,
@@ -431,8 +438,15 @@ CREATE TABLE hub.raw_event (
     trace_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    version BIGINT NOT NULL DEFAULT 0
-);
+    version BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, received_at),
+    CONSTRAINT uk_raw_event_channel_event UNIQUE (organization_id, channel_connection_id, channel_event_id, received_at)
+) PARTITION BY RANGE (received_at);
+
+-- Catches any row outside an explicitly created monthly partition (clock skew,
+-- backfill, or simply a month nobody has provisioned yet). RawEventPartitionMaintenanceService
+-- creates real monthly partitions ahead of time and drops ones past the retention window.
+CREATE TABLE hub.raw_event_default PARTITION OF hub.raw_event DEFAULT;
 
 CREATE TABLE hub.audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

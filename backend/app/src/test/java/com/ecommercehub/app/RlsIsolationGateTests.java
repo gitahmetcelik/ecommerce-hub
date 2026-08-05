@@ -160,10 +160,11 @@ public class RlsIsolationGateTests extends AbstractTestcontainersTest {
     @Test
     @DisplayName("RLS gate 5: dynamic pg_class scan — EVERY table in the hub schema has relrowsecurity, relforcerowsecurity, and >=1 policy")
     void test5_DynamicTableScan() {
+        // relkind 'r' = ordinary table, 'p' = partitioned table (hub.raw_event's parent).
         List<Map<String, Object>> tables = jdbcTemplate.queryForList(
                 "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity " +
                 "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-                "WHERE n.nspname = 'hub' AND c.relkind = 'r';"
+                "WHERE n.nspname = 'hub' AND c.relkind IN ('r', 'p');"
         );
 
         assertThat(tables).isNotEmpty();
