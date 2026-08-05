@@ -2,6 +2,8 @@ package com.ecommercehub.app.retention;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +34,19 @@ public class RawEventPartitionMaintenanceService {
     public RawEventPartitionMaintenanceService(JdbcTemplate jdbcTemplate, RetentionProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
         this.properties = properties;
+    }
+
+    /**
+     * Runs once at boot, before any webhook traffic can reach hub.raw_event. Without
+     * this, a fresh deployment's first month of rows lands in raw_event_default, and
+     * Postgres refuses to ever attach a real partition for that month afterward
+     * ("updated partition constraint... would be violated by some row") — discovered
+     * by test classes racing each other against a shared database, but it's a real
+     * production ordering requirement, not just a test artifact.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void ensurePartitionsOnStartup() {
+        ensureUpcomingPartitions();
     }
 
     /** Creates this month's and the next N months' partitions if they don't already exist. */

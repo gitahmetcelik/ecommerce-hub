@@ -58,6 +58,15 @@ public class RetentionGateTests extends AbstractTestcontainersTest {
         jdbcTemplate.execute(String.format(
                 "CREATE TABLE IF NOT EXISTS hub.%s PARTITION OF hub.raw_event FOR VALUES FROM ('%s') TO ('%s')",
                 oldPartitionName, old.atDay(1), old.plusMonths(1).atDay(1)));
+        // Real partitions always go through RawEventPartitionMaintenanceService, which
+        // applies RLS to every one it creates — matching that here so this synthetic
+        // "pre-existing old partition" is a faithful stand-in, not a table that would
+        // fail RlsIsolationGateTests' schema-wide scan simply because this test built it by hand.
+        jdbcTemplate.execute("ALTER TABLE hub." + oldPartitionName + " ENABLE ROW LEVEL SECURITY");
+        jdbcTemplate.execute("ALTER TABLE hub." + oldPartitionName + " FORCE ROW LEVEL SECURITY");
+        jdbcTemplate.execute("CREATE POLICY org_isolation ON hub." + oldPartitionName +
+                " USING (organization_id = current_setting('hub.org_id')::uuid) " +
+                "WITH CHECK (organization_id = current_setting('hub.org_id')::uuid)");
 
         partitionMaintenanceService.ensureUpcomingPartitions();
         partitionMaintenanceService.dropExpiredPartitions();
