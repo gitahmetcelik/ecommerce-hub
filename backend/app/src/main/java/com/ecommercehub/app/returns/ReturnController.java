@@ -6,7 +6,12 @@ import com.ecommercehub.domain.returns.ReturnPayment;
 import com.ecommercehub.domain.returns.ReturnRequest;
 import com.ecommercehub.domain.returns.ReturnService;
 import com.ecommercehub.domain.returns.Shipment;
+import com.ecommercehub.domain.tenant.TenantContextService;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,10 +38,17 @@ public class ReturnController {
 
     private final ReturnService returnService;
     private final ReturnFulfilmentService fulfilmentService;
+    private final TenantContextService tenantContextService;
+    private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedJdbcTemplate;
 
-    public ReturnController(ReturnService returnService, ReturnFulfilmentService fulfilmentService) {
+    public ReturnController(ReturnService returnService, ReturnFulfilmentService fulfilmentService,
+                             TenantContextService tenantContextService, JdbcTemplate jdbcTemplate) {
         this.returnService = returnService;
         this.fulfilmentService = fulfilmentService;
+        this.tenantContextService = tenantContextService;
+        this.jdbcTemplate = jdbcTemplate;
+        this.namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
     }
 
     public record RejectRequest(String reason) {
@@ -44,9 +57,33 @@ public class ReturnController {
     public record DispositionRequest(Map<UUID, ReturnService.Disposition> byReturnItemId) {
     }
 
+    /** The operator's work list: open returns first, because those are the ones needing a decision. */
+    @GetMapping
+    @Transactional
+    public List<Map<String, Object>> list() {
+        tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
+        return jdbcTemplate.queryForList("""
+                SELECT id, status, sales_order_id, channel_return_id, reason, timeout_at, created_at
+                FROM hub.return_request
+                ORDER BY (status IN ('AWAITING_APPROVAL', 'TIMED_OUT')) DESC, created_at DESC
+                LIMIT 200
+                """);
+    }
+
     @GetMapping("/{returnRequestId}")
     public Map<String, Object> get(@PathVariable UUID returnRequestId) {
         return toResponse(returnService.get(CurrentUser.organizationId(), returnRequestId));
+    }
+
+    /** The lines that came back — what the receipt form needs in order to split intact from damaged. */
+    @GetMapping("/{returnRequestId}/items")
+    @Transactional
+    public List<Map<String, Object>> items(@PathVariable UUID returnRequestId) {
+        tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
+        return namedJdbcTemplate.queryForList("""
+                SELECT id, order_item_id, quantity, intact_quantity, damaged_quantity
+                FROM hub.return_item WHERE return_request_id = :id ORDER BY created_at
+                """, new MapSqlParameterSource("id", returnRequestId));
     }
 
     @PostMapping("/{returnRequestId}/approve")

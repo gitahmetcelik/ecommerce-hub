@@ -79,6 +79,16 @@ hub:
     circuit-failure-threshold: 5
     circuit-open-seconds: 60
 
+  bootstrap:
+    # Empty by default: does nothing unless an operator sets these. See
+    # BootstrapAdminProvisioner for why the first admin cannot come from the invite flow.
+    organization-name: ${HUB_BOOTSTRAP_ORG:}
+    admin-email: ${HUB_BOOTSTRAP_ADMIN_EMAIL:}
+
+  cors:
+    # The dashboard origin. Never a wildcard — see SecurityConfig.
+    allowed-origins: ${HUB_CORS_ORIGINS:http://localhost:3000}
+
   auth:
     # Dev/test-only default — production MUST override. Anyone holding this can mint a
     # token for any user in any organization.
