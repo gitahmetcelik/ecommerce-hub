@@ -25,7 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * plan Faz 2 gate: the ingest outbox — <200ms ACK, event-layer idempotency ("same
+ * Plan Phase 2 gate: the ingest outbox — <200ms ACK, event-layer idempotency ("same
  * webhook 3x, one effect"), and the trace_id link between raw_event and work_batch.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -90,7 +90,7 @@ public class IngestGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: a validly-signed webhook is ACKed and produces exactly one raw_event and one work_batch row")
+    @DisplayName("Phase 2 gate: a validly-signed webhook is ACKed and produces exactly one raw_event and one work_batch row")
     void validWebhookIsAckedAndWritesOutbox() throws Exception {
         String eventId = UUID.randomUUID().toString();
         String body = webhookBody(eventId);
@@ -109,7 +109,7 @@ public class IngestGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: the same webhook delivered 3 times has exactly one effect, not three")
+    @DisplayName("Phase 2 gate: the same webhook delivered 3 times has exactly one effect, not three")
     void sameWebhookThreeTimesHasOneEffect() throws Exception {
         String eventId = UUID.randomUUID().toString();
         String body = webhookBody(eventId);
@@ -130,7 +130,7 @@ public class IngestGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: a badly-signed webhook is rejected and never reaches raw_event")
+    @DisplayName("Phase 2 gate: a badly-signed webhook is rejected and never reaches raw_event")
     void invalidSignatureIsRejected() throws Exception {
         String eventId = UUID.randomUUID().toString();
         String body = webhookBody(eventId);
@@ -144,7 +144,7 @@ public class IngestGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: raw_event and its work_batch row share one trace_id end to end")
+    @DisplayName("Phase 2 gate: raw_event and its work_batch row share one trace_id end to end")
     void rawEventAndWorkBatchShareOneTraceId() throws Exception {
         String eventId = UUID.randomUUID().toString();
         String body = webhookBody(eventId);

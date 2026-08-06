@@ -8,12 +8,12 @@ import org.springframework.stereotype.Component;
 /**
  * Periodic trigger for the dispatcher and orphan sweeper. Guarded by the task
  * engine's own ShedLock table so only one instance runs this at a time — per
- * plan §2.3, that single-instance constraint is the real ceiling on
+ * Plan §2.3, that single-instance constraint is the real ceiling on
  * maxThroughput = organizationCount * perOrgPerCycle / cyclePeriod, not the SQL.
  *
  * <p>The plan describes dispatch as "a cron job inside the engine"; wiring it
  * through the engine's own scheduled-task registry instead of a plain
- * {@code @Scheduled} method is deferred until task-handlers (Faz 0c) exists to
+ * {@code @Scheduled} method is deferred until task-handlers (Phase 0c) exists to
  * host that registration — the methods here are independently callable so gate
  * tests exercise them deterministically without waiting on a timer either way.
  */

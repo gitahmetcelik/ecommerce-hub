@@ -1,7 +1,7 @@
 package com.ecommercehub.domain.intent;
 
 /**
- * plan §3 kanal_cagri_niyeti.durum: PREPARED (HAZIRLANDI) is committed BEFORE the
+ * Plan §3 kanal_cagri_niyeti.durum: PREPARED (HAZIRLANDI) is committed BEFORE the
  * channel call happens; SENT (GONDERILDI) is committed BEFORE the call is actually
  * made — the boundary a crash between "call sent" and "result recorded" leaves the
  * row at. RESULT_RECEIVED (SONUC_ALINDI) is the normal end state. AMBIGUOUS

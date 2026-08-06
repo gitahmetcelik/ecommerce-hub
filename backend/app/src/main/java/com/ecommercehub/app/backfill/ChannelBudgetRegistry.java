@@ -10,8 +10,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * One RateLimitBudget (plan §9) per channel connection, lazily created. §5's "Kanal
- * API bütçesi" row is explicitly empty pending a real-channel spike that was skipped
+ * One RateLimitBudget (Plan §9) per channel connection, lazily created. §5's "Kanal
+ * API budget" row is explicitly empty pending a real-channel spike that was skipped
  * (Mock-only decision) — this default is a placeholder, not a measured number.
  *
  * <p>Refills every known budget back to its full share on a timer — without this,

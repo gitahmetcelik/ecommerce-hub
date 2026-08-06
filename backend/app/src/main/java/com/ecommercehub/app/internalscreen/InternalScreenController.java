@@ -20,8 +20,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan Faz 2: "çirkin ama çalışan iç ekran" — plain JSON listings, no UI. A real
- * dashboard is Faz 6; this exists so a human can see what's happening without psql.
+ * Plan Phase 2: "an ugly but working internal screen" — plain JSON listings, no UI. A real
+ * dashboard is Phase 6; this exists so a human can see what's happening without psql.
  */
 @RestController
 public class InternalScreenController {
@@ -93,7 +93,7 @@ public class InternalScreenController {
     }
 
     /**
-     * work_batch is org-scoped (RLS), its linked engine task is not (plan §1.1) — joined
+     * work_batch is org-scoped (RLS), its linked engine task is not (Plan §1.1) — joined
      * here so the screen can show task status without a cross-org bypass connection.
      */
     @GetMapping("/internal/tasks")
@@ -109,7 +109,7 @@ public class InternalScreenController {
                 """);
     }
 
-    /** plan Faz 3: the operator matching screen — every PENDING mapping_candidate awaiting a human decision. */
+    /** Plan Phase 3: the operator matching screen — every PENDING mapping_candidate awaiting a human decision. */
     @GetMapping("/internal/mapping-candidates")
     @Transactional
     public List<Map<String, Object>> mappingCandidates() {
@@ -134,7 +134,7 @@ public class InternalScreenController {
     }
 
     /**
-     * plan Faz 4: the push queue. A row sitting at PENDING with a high generation means
+     * Plan Phase 4: the push queue. A row sitting at PENDING with a high generation means
      * a channel is being told a number repeatedly and never confirming it — the shape a
      * broken push takes, and invisible from anywhere else.
      */
@@ -149,7 +149,7 @@ public class InternalScreenController {
                 """);
     }
 
-    /** plan §11: what reconcile found and deliberately did not fix. */
+    /** Plan §11: what reconcile found and deliberately did not fix. */
     @GetMapping("/internal/stock-discrepancies")
     @Transactional
     public List<Map<String, Object>> stockDiscrepancies() {
@@ -160,7 +160,7 @@ public class InternalScreenController {
                 """);
     }
 
-    /** plan §3: sales we could not back with stock. */
+    /** Plan §3: sales we could not back with stock. */
     @GetMapping("/internal/oversells")
     @Transactional
     public List<Map<String, Object>> oversells() {
@@ -171,7 +171,7 @@ public class InternalScreenController {
                 """);
     }
 
-    /** plan Faz 4: connection health — circuit state and why it was last tripped. */
+    /** Plan Phase 4: connection health — circuit state and why it was last tripped. */
     @GetMapping("/internal/channel-connections")
     @Transactional
     public List<Map<String, Object>> channelConnections() {
@@ -184,7 +184,7 @@ public class InternalScreenController {
     }
 
     /**
-     * plan Faz 7: an erasure request. ADMIN-only and irreversible — the role check lives
+     * Plan Phase 7: an erasure request. ADMIN-only and irreversible — the role check lives
      * in the service, like every other one, so it holds for callers that are not this
      * endpoint.
      */
@@ -196,7 +196,7 @@ public class InternalScreenController {
                 "alreadyErased", result.alreadyErased());
     }
 
-    /** motor.olu_mektup_kutusu has no organization_id (plan §1.1) — this is a system-wide view, not org-scoped. */
+    /** motor.olu_mektup_kutusu has no organization_id (Plan §1.1) — this is a system-wide view, not org-scoped. */
     @GetMapping("/internal/dlq")
     public List<Map<String, Object>> deadLetterQueue() {
         return jdbcTemplate.queryForList("""

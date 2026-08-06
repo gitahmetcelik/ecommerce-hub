@@ -29,7 +29,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * plan §11 row 2: the hourly return delta pass — the only way a customer return
+ * Plan §11 row 2: the hourly return delta pass — the only way a customer return
  * actually enters the hub.
  *
  * <p>mock-pazaryeri seeds five returns against its first five orders, each carrying the
@@ -111,7 +111,7 @@ public class ReturnReconcileGateTests extends AbstractTestcontainersTest {
 
         assertThat(reconcileService.reconcileReturns(orgId, channelConnectionId)).isEqualTo(1);
         assertThat(reconcileService.reconcileReturns(orgId, channelConnectionId))
-                .withFailMessage("plan §8's 5-minute overlap re-presents returns we already have — a second "
+                .withFailMessage("Plan §8's 5-minute overlap re-presents returns we already have — a second "
                         + "approval request for the same parcel would be a duplicate refund waiting to happen")
                 .isZero();
 

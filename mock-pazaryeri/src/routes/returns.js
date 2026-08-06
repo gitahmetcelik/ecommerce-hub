@@ -17,7 +17,7 @@ router.get('/returns', (req, res) => {
   res.json({ items: pageItems, page, pageSize, totalPages, hasMore: page < totalPages });
 });
 
-// Idempotent on intentId (plan §4.3/§8): a repeated call with the same intentId
+// Idempotent on intentId (Plan §4.3/§8): a repeated call with the same intentId
 // must produce exactly one effect, never a second decision recorded.
 router.post('/returns/:id/decision', (req, res) => {
   const state = store.get();

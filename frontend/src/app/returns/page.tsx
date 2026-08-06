@@ -31,7 +31,7 @@ function Returns({ session }: { session: Session }) {
 
   /**
    * Every action reports the backend's own error text. The role checks live in the
-   * services (plan §7), so a refusal here is the real answer rather than a guess this
+   * services (Plan §7), so a refusal here is the real answer rather than a guess this
    * screen made — and hiding the buttons alone would leave the user with no explanation.
    */
   const act = useMutation({
@@ -128,7 +128,7 @@ function Returns({ session }: { session: Session }) {
     <>
       <PageHeader
         title="Returns"
-        description="A return past its 48-hour deadline is escalated, never auto-rejected (plan §0) — it stays decidable."
+        description="A return past its 48-hour deadline is escalated, never auto-rejected (Plan §0) — it stays decidable."
       />
 
       <DataTable
@@ -144,7 +144,7 @@ function Returns({ session }: { session: Session }) {
   );
 }
 
-/** The intact/damaged split, per line — plan §3 keeps damaged units off sellable stock. */
+/** The intact/damaged split, per line — Plan §3 keeps damaged units off sellable stock. */
 function ReceiptPanel({ returnRequestId, onDone }: { returnRequestId: string; onDone: () => void }) {
   const items = useQuery({
     queryKey: ["return-items", returnRequestId],

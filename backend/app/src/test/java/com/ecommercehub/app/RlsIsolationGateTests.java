@@ -145,7 +145,7 @@ public class RlsIsolationGateTests extends AbstractTestcontainersTest {
      * Postgres documented behavior — so current_setting() then returns ''
      * instead, which fails the ::uuid cast in the RLS policy with a different
      * message. Both are hard errors, never an empty/silent result, which is
-     * the actual production guarantee (plan §3b); with a raw never-reused
+     * the actual production guarantee (Plan §3b); with a raw never-reused
      * connection per test this always resolves to the first case, but the
      * assertion stays permissive since either is a valid proof of "errors,
      * doesn't silently return nothing."

@@ -15,10 +15,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * plan §3 rezervasyon semantiği: "Rezervasyon süresi doldu: rezerve -n, sipariş
- * ODEME_ZAMAN_ASIMI." A reservation past its expiry only means anything if payment
+ * Plan §3 reservation semantics: when a reservation expires the hold is released and the
+ * order line moves to PAYMENT_TIMEOUT. A reservation past its expiry only matters if payment
  * never arrived in the meantime — if it did, PAID already cleared expiresAt (plan
- * §3: "Ödeme onaylandı: son_gecerlilik kaldırılır"), so it never shows up in this
+ * §3: "payment confirmed: the hold expiry is cleared"), so it never shows up in this
  * sweep's query in the first place. No transition-decision machinery needed here:
  * an expired reservation whose item is still pre-payment mainline can only mean
  * PAYMENT_TIMEOUT is legitimate.
@@ -45,7 +45,7 @@ public class StockReservationExpiryService {
 
     /**
      * Releases every reservation past its expiry for one organization and times out
-     * the order item it belongs to. Sets its own RLS context (plan §3c) — callers
+     * the order item it belongs to. Sets its own RLS context (Plan §3c) — callers
      * enumerate organizations cross-org via hub_system, then call this once per org,
      * each in its own transaction.
      */

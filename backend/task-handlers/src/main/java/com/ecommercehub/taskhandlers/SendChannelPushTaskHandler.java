@@ -7,7 +7,7 @@ import com.gorevplatformu.motorcekirdek.GorevHandler;
 import com.gorevplatformu.motorcekirdek.GorevTipi;
 
 /**
- * plan §4.2's {@code push-gonder} task: drains one send window for one channel.
+ * Plan §4.2's {@code push-gonder} task: drains one send window for one channel.
  *
  * <p>Thin by the same rule as every other handler — all the work lives behind
  * {@link ChannelPushWindowSender}. Note that {@code @GorevTipi} is itself a

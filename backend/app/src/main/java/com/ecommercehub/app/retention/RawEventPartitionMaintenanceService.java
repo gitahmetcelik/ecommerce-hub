@@ -15,7 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Creates and drops hub.raw_event's monthly partitions (plan §3, §4.4, §12 Faz 7 gate).
+ * Creates and drops hub.raw_event's monthly partitions (Plan §3, §4.4, §12 Phase 7 gate).
  * 90-day retention here is a partition DROP, not a DELETE — the entire reason raw_event
  * is partitioned instead of being one ever-growing table.
  *
@@ -121,7 +121,7 @@ public class RawEventPartitionMaintenanceService {
                 "CREATE TABLE IF NOT EXISTS hub.%s PARTITION OF hub.raw_event FOR VALUES FROM ('%s') TO ('%s')",
                 partitionName, from, to));
 
-        // Mirrors the RLS setup V1000 applies to every hub table (plan §3 a-d) — a
+        // Mirrors the RLS setup V1000 applies to every hub table (Plan §3 a-d) — a
         // partition attached after the migration ran would otherwise be unprotected
         // if ever queried by its own name instead of through the parent.
         jdbcTemplate.execute(String.format("ALTER TABLE hub.%s ENABLE ROW LEVEL SECURITY", partitionName));

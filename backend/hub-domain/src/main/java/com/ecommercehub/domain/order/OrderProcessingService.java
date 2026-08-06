@@ -20,10 +20,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Applies one order event (plan Faz 2) end to end: find-or-create the sales_order,
- * apply the plan §6 transition decision per item, run the matching stock side
+ * Applies one order event (Plan Phase 2) end to end: find-or-create the sales_order,
+ * apply the Plan §6 transition decision per item, run the matching stock side
  * effects, and recompute derived_status — all under the order row's lock, in one
- * transaction, per plan §3.
+ * transaction, per Plan §3.
  */
 @Service
 public class OrderProcessingService {
@@ -55,7 +55,7 @@ public class OrderProcessingService {
     /**
      * Sets its own RLS tenant context rather than trusting the caller to have done
      * so — this runs from a webhook handler, a task handler, and tests alike, and
-     * plan §3(c)'s "one place sets the context" is about avoiding scattered raw
+     * Plan §3(c)'s "one place sets the context" is about avoiding scattered raw
      * set_config calls, not about forbidding an entry point from asserting its own.
      */
     @Transactional
@@ -76,7 +76,7 @@ public class OrderProcessingService {
                     incoming.sku(), incoming.barcode(), incoming.sku());
 
             if (!match.matched()) {
-                // plan Faz 3 gate: unmatched items never touch stock and never silently
+                // Plan Phase 3 gate: unmatched items never touch stock and never silently
                 // vanish — CatalogMatchingService already queued it for operator review;
                 // there is no variant_id to create an order_item against (NOT NULL FK),
                 // so this item is simply absent from the order until someone resolves it.
@@ -172,7 +172,7 @@ public class OrderProcessingService {
                 reservation.ifPresent(stockReservationRepository::delete);
             }
             case IN_RETURN -> {
-                // Intact/damaged stock disposition is Faz 5 (return flow) — no effect here yet.
+                // Intact/damaged stock disposition is Phase 5 (return flow) — no effect here yet.
             }
             default -> {
                 // AWAITING_PAYMENT, PREPARING, DELIVERED, CREATED: no stock counter change.

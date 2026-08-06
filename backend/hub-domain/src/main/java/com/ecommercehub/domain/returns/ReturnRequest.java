@@ -13,7 +13,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.Instant;
 import java.util.UUID;
 
-/** plan §7. One customer return, covering one or more items of a single order. */
+/** Plan §7. One customer return, covering one or more items of a single order. */
 @Entity
 @Table(name = "return_request", schema = "hub")
 public class ReturnRequest {

@@ -3,7 +3,7 @@ package com.ecommercehub.dispatcher;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Capacity equation (plan §2.3): maxThroughput = organizationCount * perOrgPerCycle / cyclePeriod.
+ * Capacity equation (Plan §2.3): maxThroughput = organizationCount * perOrgPerCycle / cyclePeriod.
  * If that number falls short of the §5 target load, perOrgPerCycle/cyclePeriod are tuned here —
  * the dispatcher runs on a single ShedLock-guarded instance, so this equation is the real ceiling.
  */

@@ -1,8 +1,8 @@
 package com.ecommercehub.domain.order;
 
 /**
- * plan §6: "Geçersiz geçiş = hata değil → görev ERTELENDİ + üstel gecikmeli yeniden
- * deneme." Thrown to let the task engine's own retry/backoff (plan §3 dayanıklılık,
+ * Plan §6: an invalid transition is not an error — the task is deferred and retried with
+ * exponential backoff. Thrown to let the task engine's own retry (Plan §3 resilience,
  * already built) BE the deferral mechanism, instead of a second bespoke queue.
  * Rolls the whole event back — safe because every already-applied item in the same
  * event is target-status idempotent and simply no-ops on retry.

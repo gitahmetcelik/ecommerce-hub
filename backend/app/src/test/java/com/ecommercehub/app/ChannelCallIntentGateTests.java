@@ -21,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Exercises the crash-recovery contract from plan §3/§4.3 without a real connector
- * (Faz 1) by standing in a fake {@link com.ecommercehub.domain.intent.IntentStatusResolver}
+ * Exercises the crash-recovery contract from Plan §3/§4.3 without a real connector
+ * (Phase 1) by standing in a fake {@link com.ecommercehub.domain.intent.IntentStatusResolver}
  * for "ask the channel what happened."
  */
 @SpringBootTest

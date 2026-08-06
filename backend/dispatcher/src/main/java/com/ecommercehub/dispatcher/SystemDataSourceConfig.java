@@ -15,7 +15,7 @@ import javax.sql.DataSource;
 /**
  * A second connection pool, authenticated as hub_system (BYPASSRLS), separate from the
  * app's primary pool. This is the one place org-spanning queries are allowed to exist
- * (plan §3(a)) — the dispatcher has to see every organization's pending work at once to
+ * (Plan §3(a)) — the dispatcher has to see every organization's pending work at once to
  * round-robin fairly, which RLS would otherwise block entirely. Never share this bean
  * with request-handling code.
  *

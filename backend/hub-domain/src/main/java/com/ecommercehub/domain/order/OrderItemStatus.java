@@ -1,7 +1,7 @@
 package com.ecommercehub.domain.order;
 
 /**
- * plan §6: the mainline chain has a total order (rank), used to compare "how far
+ * Plan §6: the mainline chain has a total order (rank), used to compare "how far
  * along" two states are without caring which arrived first. Terminal states are
  * deliberately unranked — comparing IPTAL to KARGOLANDI is undefined, not "IPTAL is
  * behind", and OrderItemTransitionDecision must never pretend otherwise.

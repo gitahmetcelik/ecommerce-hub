@@ -40,7 +40,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * plan §12 Faz 4 gate: push coalescing, the per-channel buffer and last-unit allocation,
+ * Plan §12 Phase 4 gate: push coalescing, the per-channel buffer and last-unit allocation,
  * oversell detection, the reconcile layers, and the channel circuit breaker.
  *
  * <p>Everything runs against a real Postgres and a real mock-pazaryeri over HTTP — the
@@ -103,7 +103,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 1: 50 stock changes to one variant collapse into a single channel call carrying the last value")
+    @DisplayName("Phase 4 gate 1: 50 stock changes to one variant collapse into a single channel call carrying the last value")
     void test1_FiftyChangesBecomeOneCall() {
         UUID variantId = insertVariant("SKU-COALESCE", 1000);
         mapToChannel(connectionA, variantId, "SKU-COALESCE");
@@ -137,7 +137,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 2: a value arriving mid-flight leaves the row PENDING and gets sent, instead of being overwritten by the stale success")
+    @DisplayName("Phase 4 gate 2: a value arriving mid-flight leaves the row PENDING and gets sent, instead of being overwritten by the stale success")
     void test2_MidFlightChangeIsNotLost() throws Exception {
         UUID variantId = insertVariant("SKU-INFLIGHT", 10);
         mapToChannel(connectionA, variantId, "SKU-INFLIGHT");
@@ -180,7 +180,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 3: simultaneous sales on two channels never drive stock negative — the excess is recorded as an oversell")
+    @DisplayName("Phase 4 gate 3: simultaneous sales on two channels never drive stock negative — the excess is recorded as an oversell")
     void test3_ConcurrentSalesRecordOversellInsteadOfGoingNegative() {
         UUID variantId = insertVariant("SKU-LASTONE", 1);
         mapToChannel(connectionA, variantId, "SKU-LASTONE");
@@ -214,7 +214,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 4: with one unit left, exactly one channel is shown it and every other channel is pushed 0")
+    @DisplayName("Phase 4 gate 4: with one unit left, exactly one channel is shown it and every other channel is pushed 0")
     void test4_LastUnitGoesToASingleChannel() {
         UUID variantId = insertVariant("SKU-ALLOC", 1);
         mapToChannel(connectionA, variantId, "SKU-ALLOC");
@@ -235,7 +235,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 4 gate 4b: above the low-stock threshold every channel sees the pool, minus its own buffer")
+    @DisplayName("Phase 4 gate 4b: above the low-stock threshold every channel sees the pool, minus its own buffer")
     void test4b_BufferAppliesAboveTheThreshold() {
         UUID variantId = insertVariant("SKU-BUFFER", 20);
         mapToChannel(connectionA, variantId, "SKU-BUFFER");
@@ -257,7 +257,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 5: deliberate channel drift is reported by the nightly reconcile and our own stock is left untouched")
+    @DisplayName("Phase 4 gate 5: deliberate channel drift is reported by the nightly reconcile and our own stock is left untouched")
     void test5_NightlyReconcileReportsDriftWithoutCorrectingIt() {
         // SKU-0 exists in mock-pazaryeri's seeded catalog, so the channel really returns it.
         UUID variantId = insertVariant("SKU-0", 42);
@@ -282,7 +282,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
                 "SELECT on_hand FROM hub.stock WHERE organization_id = ? AND variant_id = ?",
                 Integer.class, orgId, variantId);
         assertThat(onHand)
-                .withFailMessage("plan §0: drift is reported, never auto-corrected — our stock must be exactly as it was")
+                .withFailMessage("Plan §0: drift is reported, never auto-corrected — our stock must be exactly as it was")
                 .isEqualTo(42);
     }
 
@@ -291,7 +291,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 6: a stock row edited behind the ledger's back is caught by the internal consistency check")
+    @DisplayName("Phase 4 gate 6: a stock row edited behind the ledger's back is caught by the internal consistency check")
     void test6_LedgerInconsistencyIsDetected() {
         UUID variantId = insertVariant("SKU-LEDGER", 30);
 
@@ -314,7 +314,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 4 gate 6b: a consistent organization produces no discrepancies at all")
+    @DisplayName("Phase 4 gate 6b: a consistent organization produces no discrepancies at all")
     void test6b_ConsistentLedgerReportsNothing() {
         UUID variantId = insertVariant("SKU-CLEAN", 12);
         inTenant(() -> stockLedgerService.recordReservedIncrease(orgId, variantId, 4, null, connectionA));
@@ -329,7 +329,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 7: a channel that rejects our credentials is taken out of service and escalated to the operator queue")
+    @DisplayName("Phase 4 gate 7: a channel that rejects our credentials is taken out of service and escalated to the operator queue")
     void test7_InvalidCredentialsBreakTheCircuitAndEscalate() {
         UUID variantId = insertVariant("SKU-AUTH", 5);
         mapToChannel(connectionA, variantId, "SKU-AUTH");
@@ -362,7 +362,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 4 gate 7b: repeated transient failures open the circuit, and a later success closes it")
+    @DisplayName("Phase 4 gate 7b: repeated transient failures open the circuit, and a later success closes it")
     void test7b_TransientFailuresOpenAndThenCloseTheCircuit() {
         UUID variantId = insertVariant("SKU-CIRCUIT", 5);
         mapToChannel(connectionA, variantId, "SKU-CIRCUIT");
@@ -398,7 +398,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4 gate 8: under sustained change load the pending push depth stays bounded by variant count, not change count")
+    @DisplayName("Phase 4 gate 8: under sustained change load the pending push depth stays bounded by variant count, not change count")
     void test8_QueueDepthStaysBoundedUnderLoad() {
         int variantCount = 40;
         int changesPerVariant = 25;
@@ -431,7 +431,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
                 .withFailMessage("One window must drain the whole backlog — a depth that survives it grows without bound")
                 .isZero();
         assertThat(stockUpdateCallCount())
-                .withFailMessage("The entire backlog goes out in one batch call (plan §8), not one call per variant")
+                .withFailMessage("The entire backlog goes out in one batch call (Plan §8), not one call per variant")
                 .isEqualTo(1);
     }
 
@@ -440,7 +440,7 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 4: each send window becomes one work_batch row whose task key carries the window start")
+    @DisplayName("Phase 4: each send window becomes one work_batch row whose task key carries the window start")
     void windowSchedulerKeysTasksByWindowNotJustByConnection() {
         UUID variantId = insertVariant("SKU-WINDOW", 7);
         mapToChannel(connectionA, variantId, "SKU-WINDOW");

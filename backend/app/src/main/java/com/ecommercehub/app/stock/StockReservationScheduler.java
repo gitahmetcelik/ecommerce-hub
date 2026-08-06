@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Reservation expiry is inherently cross-org (plan §3), same as the dispatcher (Faz
+ * Reservation expiry is inherently cross-org (Plan §3), same as the dispatcher (Faz
  * 0b) — enumerating organizations needs BYPASSRLS, which only hub_system has. Reuses
  * dispatcher's existing systemJdbcTemplate bean rather than standing up a second
  * hub_system connection pool; the actual per-org expiry work still runs through the

@@ -1,7 +1,7 @@
 package com.ecommercehub.connector;
 
 /**
- * plan §8 durumSorgula: resolves a BELIRSİZ intent by asking the channel directly.
+ * Plan §8 (durumSorgula): resolves an AMBIGUOUS intent by asking the channel directly.
  * resultJson is opaque (raw response text) on purpose — the caller (ChannelCallIntentService)
  * only needs to know whether an outcome was found, not to understand its shape.
  */

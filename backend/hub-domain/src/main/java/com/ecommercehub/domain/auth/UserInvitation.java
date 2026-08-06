@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §10: an organization administrator adds a user, and the user sets their own
+ * Plan §10: an organization administrator adds a user, and the user sets their own
  * password. The administrator never chooses a password on someone else's behalf —
  * a password the admin knows is not a credential that identifies the user.
  */

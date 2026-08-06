@@ -18,7 +18,7 @@ import java.util.UUID;
  *
  * <p>Runs in the caller's transaction by design: the stock movement and the push
  * intent commit together or not at all. That is the same transactional-outbox
- * guarantee plan §1.6 pins the engine to — a committed stock change with no queued
+ * guarantee Plan §1.6 pins the engine to — a committed stock change with no queued
  * push would leave the channel permanently stale, and a queued push with no committed
  * change would advertise a quantity we never had.
  */

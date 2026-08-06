@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §3: {@code satilabilir(kanal) = fiziksel − rezerve − tampon(kanal)}, plus the
+ * Plan §3: {@code satilabilir(kanal) = fiziksel − rezerve − tampon(kanal)}, plus the
  * last-unit allocation policy that formula alone cannot express.
  *
  * <p><b>Why allocation exists.</b> The plain formula shows every channel the same

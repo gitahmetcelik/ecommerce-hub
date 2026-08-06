@@ -1,5 +1,5 @@
 -- Flyway Migration V1002__faz5_auth_and_returns.sql
--- Faz 5: authentication (plan §10) and the return flow (plan §7).
+-- Phase 5: authentication (Plan §10) and the return flow (Plan §7).
 --
 -- V1000 already created app_user, user_role, return_request, return_item,
 -- return_payment and shipment as bare skeletons. What was missing is everything a
@@ -73,18 +73,18 @@ CREATE UNIQUE INDEX idx_refresh_token_token ON hub.refresh_token (token_hash);
 CREATE INDEX idx_refresh_token_user ON hub.refresh_token (user_id) WHERE revoked_at IS NULL;
 
 -- =============================================================================
--- 3. RETURN FLOW (plan §7)
+-- 3. RETURN FLOW (Plan §7)
 -- =============================================================================
 ALTER TABLE hub.return_request
     ADD COLUMN channel_return_id TEXT,
     ADD COLUMN reason TEXT,
-    -- Two separate deadlines, not one: 24h is a reminder, 48h is the timeout. plan §0
+    -- Two separate deadlines, not one: 24h is a reminder, 48h is the timeout. Plan §0
     -- is explicit that the timeout escalates to a human and never auto-rejects — an
     -- automatic rejection is a customer-visible decision nobody made.
     ADD COLUMN reminder_at TIMESTAMPTZ,
     ADD COLUMN reminded_at TIMESTAMPTZ,
     ADD COLUMN rejection_reason TEXT,
-    -- plan §7: "Geri kargo etiketi → 5x retry → DLQ + operatör kuyruğu". The engine's
+    -- Plan §7: "return label: five retries, then the DLQ and the operator queue". The engine's
     -- retry produces the DLQ entry; this counter is what makes the operator queue half
     -- happen, and it has to be persisted because each retry is a separate task attempt
     -- in a separate transaction with no memory of the previous one.
@@ -115,9 +115,9 @@ ALTER TABLE hub.shipment
     ADD COLUMN status TEXT NOT NULL DEFAULT 'CREATED';
 
 -- =============================================================================
--- 4. RLS FOR THE NEW TABLES (plan §3 a-d)
+-- 4. RLS FOR THE NEW TABLES (Plan §3 a-d)
 -- =============================================================================
--- The Faz 0a gate test reads the table list from pg_class rather than a hardcoded
+-- The Phase 0a gate test reads the table list from pg_class rather than a hardcoded
 -- list, so a table added without these three statements fails that test instead of
 -- quietly shipping unprotected. This block is what keeps that test green.
 DO $$

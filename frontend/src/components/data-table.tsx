@@ -9,7 +9,7 @@ export type Column<T> = {
 };
 
 /**
- * Deliberately plain. plan §12 puts a real dashboard in Faz 6 but the operator screens
+ * Deliberately plain. Plan §12 puts a real dashboard in Phase 6 but the operator screens
  * are lists of rows with a few actions — a table component that can be read in one sitting
  * beats a grid library whose behaviour has to be looked up.
  */

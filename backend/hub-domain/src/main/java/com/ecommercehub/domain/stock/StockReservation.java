@@ -12,8 +12,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3 rezervasyon semantiği: created with expires_at = now + 24h; payment
- * confirmation clears expires_at (stops the clock, plan's "son_gecerlilik kaldırılır");
+ * Plan §3 reservation semantics: created with expires_at = now + 24h; payment
+ * confirmation clears expires_at (stops the clock, plan's "the hold expiry is cleared");
  * a still-ticking reservation past its expiry is released by
  * {@link StockReservationExpiryService}, which also times out the order item.
  */
@@ -83,7 +83,7 @@ public class StockReservation {
         return expiresAt;
     }
 
-    /** plan §3: payment confirmation "removes" the expiry — the row stays, just stops ticking. */
+    /** Plan §3: payment confirmation "removes" the expiry — the row stays, just stops ticking. */
     public void clearExpiry() {
         this.expiresAt = null;
     }

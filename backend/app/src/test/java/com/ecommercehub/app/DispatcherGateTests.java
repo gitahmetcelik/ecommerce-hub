@@ -47,7 +47,7 @@ public class DispatcherGateTests extends AbstractTestcontainersTest {
         jdbcTemplate.update("INSERT INTO hub.organization (id, name, task_quota) VALUES (?, ?, ?)", orgBId, "Org B", 20);
 
         // The task type must be pre-registered in the engine's own gorev_tanimlari
-        // table (FK constraint) — no domain handler exists yet at Faz 0b, so this
+        // table (FK constraint) — no domain handler exists yet at Phase 0b, so this
         // is a bare-minimum definition just to prove the dispatcher's own logic.
         jdbcTemplate.update("""
                 INSERT INTO motor.gorev_tanimlari (tip, kuyruk)

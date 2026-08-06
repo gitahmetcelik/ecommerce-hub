@@ -18,7 +18,7 @@ router.post('/_admin/scenario', (req, res) => {
 });
 
 // Overwrites the channel's own stock without going through /stock/bulk-update — this is
-// how a test injects the drift the nightly reconcile (plan §11) is meant to find. Real
+// how a test injects the drift the nightly reconcile (Plan §11) is meant to find. Real
 // drift comes from a sale we have not seen yet or an edit made in the channel's own
 // admin UI; from our side both look exactly like this.
 router.post('/_admin/stock', (req, res) => {

@@ -82,7 +82,8 @@ class RateLimitBudgetTests {
             assertThat(budget.tryAcquire(BudgetClass.BACKGROUND)).isTrue();
         }
         assertThat(budget.tryAcquire(BudgetClass.BACKGROUND))
-                .withFailMessage("plan §9: \"ters yönde devir yok\" — BACKGROUND may never dip into INTERACTIVE's idle tokens")
+                .withFailMessage("Plan §9: idle capacity never flows downwards — BACKGROUND may not "
+                        + "dip into INTERACTIVE's unused tokens")
                 .isFalse();
     }
 

@@ -41,7 +41,7 @@ public class ChannelConnection {
     @Column(name = "next_reconcile_at")
     private Instant nextReconcileAt;
 
-    /** plan Faz 3: the resumable backfill cursor — absent/null means "never started". */
+    /** Plan Phase 3: the resumable backfill cursor — absent/null means "never started". */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "backfill_status")
     private String backfillStatus;

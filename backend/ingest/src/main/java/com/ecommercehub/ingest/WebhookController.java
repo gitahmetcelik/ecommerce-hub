@@ -14,7 +14,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 /**
- * Deliberately thin — reads the raw bytes (plan §3: HMAC verification must see the
+ * Deliberately thin — reads the raw bytes (Plan §3: HMAC verification must see the
  * exact wire bytes, before Jackson or anything else touches them) and headers, then
  * hands off to {@link WebhookIngestOrchestrator} for everything transactional.
  */

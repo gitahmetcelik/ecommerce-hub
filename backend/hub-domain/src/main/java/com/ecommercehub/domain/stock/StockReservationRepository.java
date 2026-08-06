@@ -11,6 +11,6 @@ public interface StockReservationRepository extends JpaRepository<StockReservati
 
     Optional<StockReservation> findByOrderItemId(UUID orderItemId);
 
-    /** Only still-ticking reservations have a non-null expiresAt (plan §3: payment clears it). */
+    /** Only still-ticking reservations have a non-null expiresAt (Plan §3: payment clears it). */
     List<StockReservation> findByExpiresAtNotNullAndExpiresAtBefore(Instant cutoff);
 }

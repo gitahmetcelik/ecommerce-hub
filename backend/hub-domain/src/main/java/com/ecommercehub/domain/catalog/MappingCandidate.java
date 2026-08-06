@@ -14,9 +14,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3: an item the channel reports that couldn't be resolved to exactly one
+ * Plan §3: an item the channel reports that couldn't be resolved to exactly one
  * variant — either nothing matched (candidateVariantIdsJson empty/null) or more than
- * one did (ambiguous, needs a human to pick). Never silently dropped (plan §3, Faz 3
+ * one did (ambiguous, needs a human to pick). Never silently dropped (Plan §3, Phase 3
  * gate): every unmatched item lands here and in the operator queue.
  */
 @Entity

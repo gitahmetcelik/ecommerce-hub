@@ -25,8 +25,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * The concrete first customer of {@link ConnectorContractTest} (plan Faz 1 gate:
- * "Sözleşme testi paketi yeşil"). Every hook below drives mock-pazaryeri's
+ * The concrete first customer of {@link ConnectorContractTest} (Plan Phase 1 gate:
+ * "the contract test suite passes"). Every hook below drives mock-pazaryeri's
  * /_admin endpoints — a real channel's contract test would use WireMock or a
  * sandbox account instead, but the inherited @Test methods never change.
  */

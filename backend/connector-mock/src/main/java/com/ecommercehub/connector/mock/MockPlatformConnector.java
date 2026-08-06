@@ -44,7 +44,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * plan §8: talks to mock-pazaryeri over real HTTP (not an in-process fake) — the
+ * Plan §8: talks to mock-pazaryeri over real HTTP (not an in-process fake) — the
  * first, throwaway-free implementer of {@link PlatformConnector} and what the
  * shared contract test suite runs against before any real channel exists.
  *

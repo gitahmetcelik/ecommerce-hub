@@ -5,10 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "hub.push")
 public class PushProperties {
 
-    /** plan §3: "Gönderim görevi 5 sn'lik pencerede bekleyen satırları toplar". */
+    /** Plan §3: "the send task collects whatever is pending in a 5-second window". */
     private long windowMs = 5000;
 
-    /** Upper bound on rows per batch call — plan §8 assumes ~1000 SKUs per call is fine. */
+    /** Upper bound on rows per batch call — Plan §8 assumes ~1000 SKUs per call is fine. */
     private int windowBatchLimit = 1000;
 
     public long getWindowMs() {

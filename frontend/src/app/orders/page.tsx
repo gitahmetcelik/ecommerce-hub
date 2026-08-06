@@ -7,7 +7,7 @@ import { RequireSession } from "@/components/require-session";
 import { api } from "@/lib/api";
 import type { OrderItem, SalesOrder } from "@/lib/types";
 
-// plan §12 Faz 6: "real-time (önce polling)". A websocket buys sub-second latency for a
+// Plan §12 Phase 6: "real-time, polling first". A websocket buys sub-second latency for a
 // screen a human reads at human speed, at the cost of a second transport to operate.
 const POLL_MS = 5000;
 
@@ -56,7 +56,7 @@ function Orders() {
     <>
       <PageHeader
         title="Orders"
-        description="Derived order status is recomputed from its items — plan §6 keeps the state machine at line level."
+        description="Derived order status is recomputed from its items — Plan §6 keeps the state machine at line level."
       />
 
       {orders.isError && <p className="mb-4 text-sm text-destructive">{(orders.error as Error).message}</p>}

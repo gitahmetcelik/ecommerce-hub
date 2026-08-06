@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §11's local (no API calls) nightly pass: recompute every stock counter from
+ * Plan §11's local (no API calls) nightly pass: recompute every stock counter from
  * the stock_movement ledger and report anything that disagrees.
  *
  * <p>This is not redundant with the channel reconcile. A channel reconcile compares

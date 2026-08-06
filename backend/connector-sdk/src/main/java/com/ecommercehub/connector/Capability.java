@@ -1,8 +1,8 @@
 package com.ecommercehub.connector;
 
 /**
- * plan §8 Yetenek: a real capability matrix, not a uniform connector assumption —
- * merchant-of-record and API surface vary by channel. See §3's yetki matrisi and §7's
+ * Plan §8 Yetenek: a real capability matrix, not a uniform connector assumption —
+ * merchant-of-record and API surface vary by channel. See §3's authority matrix and §7's
  * return-flow variants for what each missing capability means downstream.
  */
 public enum Capability {
@@ -20,7 +20,7 @@ public enum Capability {
     /** Missing: the channel refunds the customer; we only observe that it happened. */
     REFUND_BY_US,
 
-    /** Missing: that channel runs polling-first — Faz 2's ingest path doesn't apply to it. */
+    /** Missing: that channel runs polling-first — Phase 2's ingest path doesn't apply to it. */
     WEBHOOK,
 
     /** Missing: durumSorgula-based recovery is mandatory, a client idempotency key can't help. */

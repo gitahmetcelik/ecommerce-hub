@@ -3,7 +3,7 @@ package com.ecommercehub.app.backfill;
 import java.time.Instant;
 
 /**
- * plan Faz 3: "sayfa imleci kalıcı, yarıda kesilince kaldığı yerden devam eder."
+ * Plan Phase 3: "the page cursor is persistent, so an interrupted run resumes where it stopped"
  * Serialized as-is into channel_connection.backfill_status (JSONB) after every
  * single page — a crash between two pages loses at most the in-flight page, and
  * even that is safe to refetch since catalog import and order processing are both

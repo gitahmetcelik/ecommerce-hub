@@ -16,7 +16,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3 kanal_cagri_niyeti / §4.3: the persisted record of a side-effecting
+ * Plan §3 kanal_cagri_niyeti / §4.3: the persisted record of a side-effecting
  * connector call (KARGO_OLUSTUR, IADE_KARARI, PARA_IADESI, ...). target_reference is
  * always the id of the domain row the action belongs to (kargo.id, iade.id,
  * iade_odemesi.id) — never a sales_order or return_request id, so a second shipment
@@ -81,7 +81,7 @@ public class ChannelCallIntent {
         this.targetReference = targetReference;
         this.requestSummary = requestSummary;
         this.status = IntentStatus.PREPARED;
-        // plan §3: "kanal_idempotency_anahtari = niyet id'si" — the intent's own id
+        // Plan §3: "kanal_idempotency_anahtari = niyet id'si" — the intent's own id
         // doubles as the idempotency key handed to the channel, when it supports one.
         this.channelIdempotencyKey = id.toString();
     }

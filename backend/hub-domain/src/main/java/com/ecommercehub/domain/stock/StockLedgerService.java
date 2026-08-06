@@ -10,21 +10,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * The only legitimate way to change stock.reserved/on_hand/damaged (plan §3/§4.4's
+ * The only legitimate way to change stock.reserved/on_hand/damaged (Plan §3/§4.4's
  * eventual ledger-consistency check depends on every counter change having a matching
  * stock_movement row — nothing here changes a counter without one). Locks the stock
  * row with SELECT FOR UPDATE so concurrent adjustments to the same variant serialize
  * instead of losing an update.
  *
- * <p><b>Faz 4 adds two things to every adjustment.</b> First, counters are clamped so
+ * <p><b>Phase 4 adds two things to every adjustment.</b> First, counters are clamped so
  * reserved can never exceed on_hand and nothing can go negative — a reservation that
  * does not fit is an oversell, recorded in oversell_event rather than absorbed by
- * letting the counter go negative (plan Faz 4 gate: "merkez stok negatife düşmez,
- * oversell kaydedilir"). Second, the resulting availability is queued for every
+ * letting the counter go negative (Plan Phase 4 gate: hub stock never goes negative and
+ * the oversell is recorded). Second, the resulting availability is queued for every
  * channel that sells the variant, in this same transaction.
  *
  * <p>The ledger always records the quantity <em>actually applied</em>, never the
- * requested one. That is what keeps the nightly recompute (plan §11) able to derive
+ * requested one. That is what keeps the nightly recompute (Plan §11) able to derive
  * the stock row from its movements — if a clamped request wrote its full magnitude,
  * the consistency check would report a permanent phantom discrepancy on every oversell.
  */

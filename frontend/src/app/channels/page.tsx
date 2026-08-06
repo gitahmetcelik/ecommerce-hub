@@ -35,7 +35,7 @@ function Channels() {
       header: "Circuit until",
       render: (row) => (row.circuit_open_until ? new Date(row.circuit_open_until).toLocaleString() : "—"),
     },
-    // CREDENTIALS_INVALID never reopens on its own (plan Faz 4), so this is the line that
+    // CREDENTIALS_INVALID never reopens on its own (Plan Phase 4), so this is the line that
     // tells an operator whether waiting will help or whether they have to act.
     { key: "reason", header: "Last failure", render: (row) => row.last_failure_reason ?? "—" },
     {

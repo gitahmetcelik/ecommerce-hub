@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * plan §10: login, refresh, logout, invitation and password reset.
+ * Plan §10: login, refresh, logout, invitation and password reset.
  *
  * <p>Two rules run through all of it. Secrets are stored only as hashes and shown once
  * ({@link SecretTokens}), and every outcome — including the failures — reaches the
@@ -58,7 +58,7 @@ public class AuthenticationService {
     }
 
     /**
-     * plan Faz 5 gate: "Kullanıcı davet edilir, giriş yapar, oturumu sonlandırılır."
+     * Plan Phase 5 gate: "a user is invited, signs in, and has their session ended"
      *
      * <p>The organization is part of the request rather than derived from the email:
      * emails are unique per organization, not globally, so email alone is ambiguous by

@@ -13,10 +13,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan Faz 4 "Kanal devre kesici + KIMLIK_GECERSIZ". A channel that is down, rate
+ * Plan Phase 4 "channel circuit breaker and CREDENTIALS_INVALID". A channel that is down, rate
  * limiting everything, or holding revoked credentials must stop being called — not
  * because one more failed request is expensive, but because a dead channel's retries
- * consume the very rate-limit budget (plan §9) that the healthy channels' pushes need.
+ * consume the very rate-limit budget (Plan §9) that the healthy channels' pushes need.
  *
  * <p><b>Writes here are deliberately outside the caller's transaction.</b> They go
  * through the hub_system pool, which is not bound to the application transaction
@@ -25,7 +25,7 @@ import java.util.UUID;
  * back; recording "this channel failed" inside that transaction would roll the record
  * back with it and the breaker would never trip, no matter how often the channel failed.
  *
- * <p>Using hub_system (BYPASSRLS) also sidesteps a second problem: plan §3(c) makes the
+ * <p>Using hub_system (BYPASSRLS) also sidesteps a second problem: Plan §3(c) makes the
  * tenant context strictly transaction-local, so a connection taken outside the caller's
  * transaction has no {@code hub.org_id} and every RLS-checked statement on it would
  * fail. This is the same "org-spanning bookkeeping runs as hub_system" case as the
@@ -119,7 +119,7 @@ public class ChannelCircuitBreakerService {
     }
 
     /**
-     * plan Faz 4 gate: "Kimlik geçersiz → kanal devre kesilir, operatör kuyruğuna düşer".
+     * Plan Phase 4 gate: "invalid credentials: the channel is taken out of service and the operator queue is notified".
      * Unlike a transient failure this does not expire — {@code circuit_open_until} is
      * left null precisely so nothing reopens the connection until a human re-authorises it.
      */

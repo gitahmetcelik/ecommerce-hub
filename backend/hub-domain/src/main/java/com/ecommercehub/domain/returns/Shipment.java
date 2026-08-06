@@ -12,10 +12,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3: a parcel, outbound or returning.
+ * Plan §3: a parcel, outbound or returning.
  *
  * <p>Like {@link ReturnPayment}, this row is committed before the intent that points
- * at it. plan §3 (v4) makes {@code shipment.id} the intent's target reference rather
+ * at it. Plan §3 (v4) makes {@code shipment.id} the intent's target reference rather
  * than the order or the return, because one order can ship in parts and a lost parcel
  * can be re-sent — "one shipment per order" is the wrong granularity and would block
  * the second one forever.
@@ -29,7 +29,7 @@ public class Shipment {
 
     /** We asked the channel to create the label. */
     public static final String SOURCE_CREATED_BY_US = "CREATED_BY_US";
-    /** The channel produced the label on its own; we only recorded it (plan §7). */
+    /** The channel produced the label on its own; we only recorded it (Plan §7). */
     public static final String SOURCE_PROVIDED_BY_CHANNEL = "PROVIDED_BY_CHANNEL";
 
     public static final String STATUS_CREATED = "CREATED";

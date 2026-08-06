@@ -9,7 +9,7 @@ import java.util.UUID;
  * Every order-related webhook (created, paid, cancelled, ...) carries the FULL
  * current order snapshot, not a delta — the same design real channels like Shopify
  * use. This is what sidesteps the "payment.succeeded arrives before order.created"
- * ordering problem (plan §2 Faz 2 gate) entirely: whichever event arrives first
+ * ordering problem (Plan §2 Phase 2 gate) entirely: whichever event arrives first
  * creates the order at whatever state it describes; the second one, whenever it
  * shows up, upserts against an already-correct picture instead of a delta that
  * assumes an order already exists.
@@ -19,7 +19,7 @@ public record OrderEventPayload(UUID organizationId, UUID channelConnectionId, S
                                  BigDecimal total, String currency, List<OrderEventItem> items, String traceId) {
 
     /**
-     * channelProductId/channelVariantId/barcode feed catalog matching (plan §3/Faz 3)
+     * channelProductId/channelVariantId/barcode feed catalog matching (Plan §3/Phase 3)
      * — sku alone is not always what the channel uses as its own stable identifier.
      * A caller that only has a sku (no separate channel-side id) may pass sku for
      * channelVariantId/channelProductId too; barcode is optional.

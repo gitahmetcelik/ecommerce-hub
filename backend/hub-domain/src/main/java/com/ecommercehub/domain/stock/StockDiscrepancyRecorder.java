@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * Writes stock_discrepancy rows. Reporting only — there is deliberately no "and then
- * fix it" method on this class, because plan §0 makes that a human decision and a
+ * fix it" method on this class, because Plan §0 makes that a human decision and a
  * silent auto-correction is indistinguishable from data loss after the fact.
  */
 @Component

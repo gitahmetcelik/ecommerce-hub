@@ -51,7 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * plan §12 Faz 5 gate: authentication (§10) and the return flow (§7) — approval,
+ * Plan §12 Phase 5 gate: authentication (§10) and the return flow (§7) — approval,
  * rejection, timeout, stock disposition, the capability branch, and the two dangerous
  * channel calls behind their intent records.
  */
@@ -112,7 +112,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 1: a user is invited, sets a password, logs in, and can be logged out again")
+    @DisplayName("Phase 5 gate 1: a user is invited, sets a password, logs in, and can be logged out again")
     void test1_InviteLoginLogout() {
         UUID adminId = seedUser("admin@example.com", HubRole.ADMIN);
 
@@ -145,7 +145,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 1b: a refresh token is single-use — presenting it twice fails the second time")
+    @DisplayName("Phase 5 gate 1b: a refresh token is single-use — presenting it twice fails the second time")
     void test1b_RefreshTokenRotates() {
         seedActiveUser("rotate@example.com", "pw-rotate", HubRole.OPERATOR);
         var first = authenticationService.login(orgId, "rotate@example.com", "pw-rotate");
@@ -159,7 +159,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 1c: a password reset invalidates every existing session")
+    @DisplayName("Phase 5 gate 1c: a password reset invalidates every existing session")
     void test1c_PasswordResetEndsSessions() {
         seedActiveUser("reset@example.com", "old-password", HubRole.OPERATOR);
         var session = authenticationService.login(orgId, "reset@example.com", "old-password");
@@ -179,7 +179,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 2a: an approved return moves to ACCEPTED and clears its operator queue item")
+    @DisplayName("Phase 5 gate 2a: an approved return moves to ACCEPTED and clears its operator queue item")
     void test2a_ApprovalPath() {
         AuthenticatedUser operator = actor(HubRole.OPERATOR);
         UUID returnId = openReturn(observingChannel, "SKU-APPROVE", 2);
@@ -196,7 +196,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 2b: a rejected return records who rejected it and why, and accepts no second decision")
+    @DisplayName("Phase 5 gate 2b: a rejected return records who rejected it and why, and accepts no second decision")
     void test2b_RejectionPath() {
         AuthenticatedUser operator = actor(HubRole.OPERATOR);
         UUID returnId = openReturn(observingChannel, "SKU-REJECT", 1);
@@ -210,7 +210,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 2c: the deadline escalates to a human and never auto-rejects")
+    @DisplayName("Phase 5 gate 2c: the deadline escalates to a human and never auto-rejects")
     void test2c_TimeoutEscalatesWithoutDeciding() throws Exception {
         UUID returnId = openReturn(observingChannel, "SKU-TIMEOUT", 1);
 
@@ -225,7 +225,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
 
         ReturnRequest timedOut = returnService.get(orgId, returnId);
         assertThat(timedOut.getStatus())
-                .withFailMessage("plan §0: the timeout escalates. An automatic rejection is a decision nobody made")
+                .withFailMessage("Plan §0: the timeout escalates. An automatic rejection is a decision nobody made")
                 .isEqualTo(ReturnStatus.TIMED_OUT);
         assertThat(pendingOperatorItems("RETURN_APPROVAL_TIMEOUT")).isEqualTo(1);
 
@@ -239,7 +239,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 3: sellable units return to on_hand and damaged ones to damaged, never mixed")
+    @DisplayName("Phase 5 gate 3: sellable units return to on_hand and damaged ones to damaged, never mixed")
     void test3_IntactAndDamagedGoToDifferentCounters() {
         AuthenticatedUser operator = actor(HubRole.OPERATOR);
         UUID variantId = insertVariant("SKU-DISPOSITION", 10);
@@ -262,7 +262,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 3b: a disposition that does not account for every returned unit is rejected")
+    @DisplayName("Phase 5 gate 3b: a disposition that does not account for every returned unit is rejected")
     void test3b_DispositionMustBalance() {
         AuthenticatedUser operator = actor(HubRole.OPERATOR);
         UUID variantId = insertVariant("SKU-BALANCE", 10);
@@ -282,7 +282,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 4: a return label that keeps failing reaches the operator queue instead of vanishing")
+    @DisplayName("Phase 5 gate 4: a return label that keeps failing reaches the operator queue instead of vanishing")
     void test4_ShipmentFailureEscalates() {
         AuthenticatedUser operator = actor(HubRole.OPERATOR);
         UUID returnId = openReturn(refundingChannel, "SKU-SHIPFAIL", 1);
@@ -313,7 +313,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 5: a refund whose result was never recorded is resolved by asking the channel, not by paying again")
+    @DisplayName("Phase 5 gate 5: a refund whose result was never recorded is resolved by asking the channel, not by paying again")
     void test5_InFlightRefundIsResolvedNotRepeated() {
         AuthenticatedUser admin = actor(HubRole.ADMIN);
         UUID returnId = readyForRefund(refundingChannel, "SKU-REFUND", 1, admin);
@@ -342,7 +342,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 6: on a channel that refunds its own customers, the hub observes and makes no call")
+    @DisplayName("Phase 5 gate 6: on a channel that refunds its own customers, the hub observes and makes no call")
     void test6_RefundIsObservedWhenTheChannelIsTheMerchantOfRecord() {
         AuthenticatedUser admin = actor(HubRole.ADMIN);
         UUID returnId = readyForRefund(observingChannel, "SKU-OBSERVED", 1, admin);
@@ -350,7 +350,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
         ReturnPayment payment = fulfilmentService.issueRefund(admin, returnId);
 
         assertThat(payment.getStatus())
-                .withFailMessage("plan §7: without REFUND_BY_US the refund is an event we observe, not one we cause")
+                .withFailMessage("Plan §7: without REFUND_BY_US the refund is an event we observe, not one we cause")
                 .isEqualTo(ReturnPayment.STATUS_PAID_BY_CHANNEL);
         assertThat(refundsAtChannel())
                 .withFailMessage("No refund call may be made to a channel that refunds its customers itself")
@@ -366,7 +366,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 6b: a channel that makes its own return labels gets recorded, not asked")
+    @DisplayName("Phase 5 gate 6b: a channel that makes its own return labels gets recorded, not asked")
     void test6b_ShipmentIsObservedWhenTheChannelProducesTheLabel() {
         // The default MOCK profile does have SHIPMENT_CREATE, so this exercises the other
         // branch through a connection whose channel type advertises no such capability.
@@ -385,7 +385,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 5 gate 7: an OBSERVER cannot approve a return, and the refusal is audited")
+    @DisplayName("Phase 5 gate 7: an OBSERVER cannot approve a return, and the refusal is audited")
     void test7_ObserverCannotApprove() {
         AuthenticatedUser observer = actor(HubRole.OBSERVER);
         UUID returnId = openReturn(observingChannel, "SKU-OBSERVER", 1);
@@ -402,13 +402,13 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 5 gate 7b: an OPERATOR may approve but may not authorise a refund — that is ADMIN only")
+    @DisplayName("Phase 5 gate 7b: an OPERATOR may approve but may not authorise a refund — that is ADMIN only")
     void test7b_OperatorCannotRefund() {
         AuthenticatedUser operator = actor(HubRole.OPERATOR);
         UUID returnId = readyForRefund(refundingChannel, "SKU-NOREFUND", 1, operator);
 
         assertThatThrownBy(() -> fulfilmentService.issueRefund(operator, returnId))
-                .withFailMessage("plan §7 puts money behind ADMIN")
+                .withFailMessage("Plan §7 puts money behind ADMIN")
                 .isInstanceOf(InsufficientRoleException.class);
 
         assertThat(refundsAtChannel()).isEmpty();

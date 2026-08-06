@@ -11,12 +11,12 @@ import java.util.List;
 
 /**
  * Cleans up the task engine's own tables — verified to have no built-in retention
- * (plan §1.3: a source-wide grep for temizle|retention|arsiv|purge|cleanup returned
+ * (Plan §1.3: a source-wide grep for temizle|retention|arsiv|purge|cleanup returned
  * nothing). Left alone, gorevler/gorev_denemeleri/giden_mesajlar grow forever, and
  * gorevler.idempotency_anahtari is a global UNIQUE column with no expiry — every task
  * key that has ever run stays reserved permanently.
  *
- * <p>Only TAMAMLANDI (completed) tasks are purged, per plan §4.4; BASARISIZ/DLQ'd tasks
+ * <p>Only TAMAMLANDI (completed) tasks are purged, per Plan §4.4; BASARISIZ/DLQ'd tasks
  * are left for operator review. Deletion follows the FK chain
  * (gorev_denemeleri, giden_mesajlar, olu_mektup_kutusu → gorevler) so a completed task's
  * children are always gone before the parent row.

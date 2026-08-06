@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
- * Plan §1.1: "Görev üretimi sadece bu tipi kabul eden bir fabrika üzerinden yapılır;
- * String alan aşırı yükleme eklenmez." The engine's own idempotency key is a global
- * UNIQUE column with no tenant namespace (plan §1.1) — a task submitted with a raw,
+ * Plan §1.1: tasks are only ever produced through a factory that accepts the value
+ * object, and no String-taking overload is added. The engine's idempotency key is a global
+ * UNIQUE column with no tenant namespace (Plan §1.1) — a task submitted with a raw,
  * hand-built key string bypasses the {@link com.ecommercehub.domain.vo.TaskKey}
  * value object's {org}:{type}:{businessKey} formatting entirely, and a typo or
  * missing segment there means the task silently collides with (or never collides

@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §10: "Audit: giriş/çıkış/yetki değişikliği audit_kaydı'na."
+ * Plan §10: "audit: sign-in, sign-out and permission changes are recorded"
  *
  * <p>Writes on the hub_system pool and therefore outside the caller's transaction, on
  * purpose. An audit entry that rolls back with the operation it describes cannot

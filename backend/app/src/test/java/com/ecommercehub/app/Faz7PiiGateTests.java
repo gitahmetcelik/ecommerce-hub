@@ -30,10 +30,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * plan §12 Faz 7: PII and retention hardening.
+ * Plan §12 Phase 7: PII and retention hardening.
  *
- * <p>The Trendyol connector, the other half of Faz 7, is out of scope by the same
- * decision that dropped Shopify from Faz 6 ("Mock connector only" — plan §14's real-API
+ * <p>The Trendyol connector, the other half of Phase 7, is out of scope by the same
+ * decision that dropped Shopify from Phase 6 ("Mock connector only" — Plan §14's real-API
  * checks were never run). Everything here is channel-independent and would be needed
  * whichever real channel arrives first.
  */
@@ -86,7 +86,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 7 gate: erasing a customer anonymises the row AND redacts their details from stored event bodies")
+    @DisplayName("Phase 7 gate: erasing a customer anonymises the row AND redacts their details from stored event bodies")
     void erasureReachesRawEventBodies() {
         UUID rawEventId = insertRawEventContaining(CUSTOMER_EMAIL, CUSTOMER_ADDRESS);
 
@@ -114,7 +114,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 7 gate: another customer's events are untouched — redaction is targeted, not a wipe")
+    @DisplayName("Phase 7 gate: another customer's events are untouched — redaction is targeted, not a wipe")
     void erasureDoesNotTouchOtherCustomersEvents() {
         UUID otherEventId = insertRawEventContaining("baska.musteri@example.com", "Some other street 7");
         insertRawEventContaining(CUSTOMER_EMAIL, CUSTOMER_ADDRESS);
@@ -128,7 +128,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 7 gate: a repeated erasure request is a no-op, not a second pass")
+    @DisplayName("Phase 7 gate: a repeated erasure request is a no-op, not a second pass")
     void erasureIsIdempotent() {
         insertRawEventContaining(CUSTOMER_EMAIL, CUSTOMER_ADDRESS);
 
@@ -140,7 +140,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 7 gate: erasure is ADMIN-only — it cannot be undone, so it sits where moving money sits")
+    @DisplayName("Phase 7 gate: erasure is ADMIN-only — it cannot be undone, so it sits where moving money sits")
     void erasureRequiresAdmin() {
         assertThatThrownBy(() -> erasureService.erase(actor(HubRole.OPERATOR), customerId))
                 .isInstanceOf(InsufficientRoleException.class);
@@ -155,7 +155,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 7 gate: ingesting a body full of personal data logs none of it")
+    @DisplayName("Phase 7 gate: ingesting a body full of personal data logs none of it")
     void ingestNeverLogsPersonalData() {
         String body = """
                 {"orderNumber":"CO-9001","customer":{"email":"%s","phone":"%s","address":"%s"}}
@@ -170,7 +170,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 7 gate: the erasure path itself does not log what it is erasing")
+    @DisplayName("Phase 7 gate: the erasure path itself does not log what it is erasing")
     void erasureNeverLogsWhatItErased() {
         insertRawEventContaining(CUSTOMER_EMAIL, CUSTOMER_ADDRESS);
         erasureService.erase(actor(HubRole.ADMIN), customerId);
@@ -183,7 +183,7 @@ public class Faz7PiiGateTests extends AbstractTestcontainersTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Faz 7 gate: a raw_event partition past the retention window is dropped, not scanned row by row")
+    @DisplayName("Phase 7 gate: a raw_event partition past the retention window is dropped, not scanned row by row")
     void oldRawEventPartitionsAreDropped() {
         // Deliberately years outside the window, not merely months: the previous
         // implementation only looked 36 months back and would have left this one holding

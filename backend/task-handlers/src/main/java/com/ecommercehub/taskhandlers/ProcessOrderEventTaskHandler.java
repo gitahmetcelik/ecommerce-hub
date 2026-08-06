@@ -8,12 +8,12 @@ import com.gorevplatformu.motorcekirdek.GorevTipi;
 
 /**
  * The engine-side counterpart of the work_batch row IngestService writes (plan
- * Faz 2). Handlers are thin (plan §2's "handler'lar iş mantığı taşımaz" rule) — all
- * of it lives in OrderProcessingService, which is what the ArchUnit rule from Faz 0c
+ * Phase 2). Handlers are thin (Plan §2's "handlers carry no business logic" rule) — all
+ * of it lives in OrderProcessingService, which is what the ArchUnit rule from Phase 0c
  * (only com.ecommercehub.dispatcher may call the engine) is really protecting: this
  * class is the other direction, the engine calling INTO the domain, not out to it.
  *
- * <p>Throwing here is exactly plan §6's ERTELENDİ — the engine's own retry/backoff
+ * <p>Throwing here is exactly Plan §6's deferral — the engine's own retry and backoff
  * (maxDeneme) is the deferral mechanism, not a bespoke second queue.
  */
 @GorevTipi(value = "process-order-event", maxDeneme = 8, timeoutSaniye = 30)

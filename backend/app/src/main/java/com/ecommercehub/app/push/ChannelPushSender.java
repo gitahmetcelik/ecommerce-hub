@@ -35,11 +35,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * plan §3 / Faz 4: drains one send window for one channel connection.
+ * Plan §3 / Phase 4: drains one send window for one channel connection.
  *
  * <p>Everything pending for the connection goes out in a <em>single</em> batch call
- * (plan §8: "Toplu imza zorunlu — 1000 SKU = 1 çağrı"), and every row is closed with
- * the generation compare-and-set plan §3 spells out.
+ * (Plan §8: "a bulk signature is mandatory: 1000 SKUs is one call"), and every row is closed with
+ * the generation compare-and-set Plan §3 spells out.
  *
  * <p><b>Deliberately three transactions, not one.</b> The claim commits, then the
  * channel is called with no transaction open, then the results are closed in a fresh
@@ -175,7 +175,7 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
     }
 
     /**
-     * plan §8 requires per-item results precisely so a partial failure can be expressed.
+     * Plan §8 requires per-item results precisely so a partial failure can be expressed.
      * Successful rows close; failed ones go back to PENDING and ride the next window.
      */
     private int closeResults(List<ChannelPushRow> claimed, Map<String, ChannelPushRow> bySku, List<ItemResult> results) {

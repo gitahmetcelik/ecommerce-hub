@@ -22,15 +22,15 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * plan Faz 2 gate — the sipariş kalemi state machine (§6), reservation lifecycle
+ * Plan Phase 2 gate — the order-line state machine (§6), reservation lifecycle
  * (§3), and derived-status recomputation, exercised directly against
  * OrderProcessingService (no HTTP/engine hop — see IngestGateTests for the outbox
  * plumbing that feeds this in production).
  *
- * <p>Since Faz 3, order processing routes SKUs through CatalogMatchingService
- * (plan §3) instead of auto-creating a variant — every SKU this suite exercises is
+ * <p>Since Phase 3, order processing routes SKUs through CatalogMatchingService
+ * (Plan §3) instead of auto-creating a variant — every SKU this suite exercises is
  * pre-seeded as an existing variant in setUp() so the SKU-match path resolves it,
- * matching what "an already-catalogued item" looks like in production. Faz 3's own
+ * matching what "an already-catalogued item" looks like in production. Phase 3's own
  * gate tests cover the unmatched path (mapping_candidate, operator queue).
  */
 @SpringBootTest
@@ -66,11 +66,11 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
     }
 
     /**
-     * Seeded with stock on hand, not just as a catalogue entry. Since Faz 4 the ledger
+     * Seeded with stock on hand, not just as a catalogue entry. Since Phase 4 the ledger
      * refuses to reserve or ship units that do not exist — it records an oversell_event
      * and holds the counters at zero instead of letting them go negative. A variant with
      * no stock therefore makes every order here an oversell, which is a different
-     * scenario from the reservation and state-machine behaviour these Faz 2 gates are
+     * scenario from the reservation and state-machine behaviour these Phase 2 gates are
      * about. Supplying stock first is what "an already-catalogued item" actually looks
      * like in production.
      */
@@ -102,7 +102,7 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: payment.succeeded arriving before order.created still ends with the item PAID")
+    @DisplayName("Phase 2 gate: payment.succeeded arriving before order.created still ends with the item PAID")
     void paymentBeforeOrderCreationStillEndsPaid() {
         String orderNumber = "CO-" + UUID.randomUUID();
         Instant t0 = Instant.now();
@@ -119,7 +119,7 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: two same-second events with different sequences are both processed, not silently dropped")
+    @DisplayName("Phase 2 gate: two same-second events with different sequences are both processed, not silently dropped")
     void sameSecondEventsBothProcessed() {
         String orderNumber = "CO-" + UUID.randomUUID();
         Instant sameSecond = Instant.now().truncatedTo(ChronoUnit.SECONDS);
@@ -133,7 +133,7 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: the same transition applied 3 times has one effect, not three (target-status idempotency)")
+    @DisplayName("Phase 2 gate: the same transition applied 3 times has one effect, not three (target-status idempotency)")
     void sameTransitionAppliedThreeTimesHasOneEffect() {
         String orderNumber = "CO-" + UUID.randomUUID();
         Instant t0 = Instant.now();
@@ -155,7 +155,7 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: creating an item reserves stock; an unpaid reservation past 24h times the item out and releases the hold")
+    @DisplayName("Phase 2 gate: creating an item reserves stock; an unpaid reservation past 24h times the item out and releases the hold")
     void unpaidReservationExpiresAndReleasesStock() {
         String orderNumber = "CO-" + UUID.randomUUID();
         orderProcessingService.process(singleItemEvent(orderNumber, "SKU-B", OrderItemStatus.CREATED, 1L, Instant.now()));
@@ -179,7 +179,7 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 2 gate: a 3-item order with one item cancelled derives PARTIALLY_CANCELLED")
+    @DisplayName("Phase 2 gate: a 3-item order with one item cancelled derives PARTIALLY_CANCELLED")
     void threeItemOrderWithOneCancelledIsPartiallyCancelled() {
         String orderNumber = "CO-" + UUID.randomUUID();
         Instant t0 = Instant.now();

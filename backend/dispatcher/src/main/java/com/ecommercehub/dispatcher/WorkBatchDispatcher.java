@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * The org round-robin dispatcher (plan §1.2, §2.3). Runs against the hub_system
+ * The org round-robin dispatcher (Plan §1.2, §2.3). Runs against the hub_system
  * (BYPASSRLS) connection pool — it is the one component allowed to see every
  * organization's pending work in a single query, because fairness across
  * organizations is impossible to compute one tenant at a time.

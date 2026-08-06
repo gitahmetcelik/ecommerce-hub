@@ -20,7 +20,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * plan Faz 3 gate: unmatched catalog items never silently vanish, stock is never
+ * Plan Phase 3 gate: unmatched catalog items never silently vanish, stock is never
  * touched for them, and SKU is always tried before barcode.
  */
 @SpringBootTest
@@ -59,7 +59,7 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: a completely unmatched item is queued for review, not silently dropped, and touches no stock")
+    @DisplayName("Phase 3 gate: a completely unmatched item is queued for review, not silently dropped, and touches no stock")
     void unmatchedItemIsQueuedNotDropped() {
         OrderEventPayload event = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
                 "CO-" + UUID.randomUUID(), Instant.now(), 1L, new BigDecimal("19.99"), "USD",
@@ -87,11 +87,11 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
 
         Integer stockRowCount = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM hub.stock WHERE organization_id = ?", Integer.class, orgId);
-        assertThat(stockRowCount).withFailMessage("Faz 3 gate: stock must never be touched for an unmatched item").isZero();
+        assertThat(stockRowCount).withFailMessage("Phase 3 gate: stock must never be touched for an unmatched item").isZero();
     }
 
     @Test
-    @DisplayName("Faz 3 gate: the same unmatched item seen twice queues exactly one review row, not two")
+    @DisplayName("Phase 3 gate: the same unmatched item seen twice queues exactly one review row, not two")
     void repeatedUnmatchedItemDoesNotDuplicateTheReviewRow() {
         for (int i = 0; i < 2; i++) {
             OrderEventPayload event = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
@@ -109,7 +109,7 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: SKU match wins even when a different variant also has a matching barcode")
+    @DisplayName("Phase 3 gate: SKU match wins even when a different variant also has a matching barcode")
     void skuMatchIsTriedBeforeBarcode() {
         UUID byBarcode = seedVariant("OTHER-SKU", "SHARED-BARCODE");
         UUID bySku = seedVariant("MATCH-ME", "DIFFERENT-BARCODE");
@@ -122,7 +122,7 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: exactly one variant with a matching barcode auto-resolves via AUTO_BARCODE")
+    @DisplayName("Phase 3 gate: exactly one variant with a matching barcode auto-resolves via AUTO_BARCODE")
     void singleBarcodeMatchAutoResolves() {
         UUID variantId = seedVariant("BARCODE-ONLY-SKU", "UNIQUE-BARCODE-1");
 
@@ -139,7 +139,7 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: two variants sharing a barcode is ambiguous — queued for review, not guessed at")
+    @DisplayName("Phase 3 gate: two variants sharing a barcode is ambiguous — queued for review, not guessed at")
     void ambiguousBarcodeMatchIsQueuedNotGuessed() {
         seedVariant("SKU-1", "SHARED-AMBIGUOUS");
         seedVariant("SKU-2", "SHARED-AMBIGUOUS");
@@ -155,7 +155,7 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: an operator resolving a mapping_candidate by hand creates a MANUAL mapping and an audit entry")
+    @DisplayName("Phase 3 gate: an operator resolving a mapping_candidate by hand creates a MANUAL mapping and an audit entry")
     void manualResolutionCreatesMappingAndAuditEntry() {
         UUID variantId = seedVariant("MANUAL-TARGET-SKU", null);
         UUID userId = UUID.randomUUID();

@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3: the one table that is unambiguously personal data. Everything about how it
+ * Plan §3: the one table that is unambiguously personal data. Everything about how it
  * is handled — partitioning, retention, masking — exists because of what is in here.
  */
 @Entity

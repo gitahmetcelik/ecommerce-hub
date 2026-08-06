@@ -28,7 +28,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * plan §1.5's single sweeper. The engine's cron table has no organization column, so
+ * Plan §1.5's single sweeper. The engine's cron table has no organization column, so
  * per-tenant schedules cannot live there; instead one cron ticks, and the per-connection
  * cadence is read from {@code channel_connection.next_reconcile_at}. Adding a cron row
  * per tenant would have been the alternative, and it does not survive contact with a
@@ -77,7 +77,7 @@ public class ReconcileScheduler {
         this.schedulingEnabled = schedulingEnabled;
     }
 
-    /** plan §11 row 1: per-connection delta reconcile at its own configured cadence. */
+    /** Plan §11 row 1: per-connection delta reconcile at its own configured cadence. */
     @Scheduled(fixedDelayString = "${hub.reconcile.sweep-period-ms:30000}")
     @SchedulerLock(name = "reconcile-delta-sweep", lockAtLeastFor = "PT5S", lockAtMostFor = "PT10M")
     public void sweepDueConnections() {
@@ -109,7 +109,7 @@ public class ReconcileScheduler {
     }
 
     /**
-     * plan §11 row 2: the hourly pass. Returns enter the hub here — the flow in plan §7
+     * Plan §11 row 2: the hourly pass. Returns enter the hub here — the flow in Plan §7
      * has no other way to start, so without this the whole return machine only ever runs
      * for returns a person typed in by hand.
      */
@@ -128,7 +128,7 @@ public class ReconcileScheduler {
         }
     }
 
-    /** plan §11 rows 3-4: the nightly passes — channel drift, then the local ledger replay. */
+    /** Plan §11 rows 3-4: the nightly passes — channel drift, then the local ledger replay. */
     @Scheduled(cron = "${hub.reconcile.nightly-cron:0 0 3 * * *}")
     @SchedulerLock(name = "reconcile-nightly", lockAtLeastFor = "PT1M", lockAtMostFor = "PT6H")
     public void runNightly() {
@@ -154,7 +154,7 @@ public class ReconcileScheduler {
     }
 
     /**
-     * plan §11 row 5: SENT intents that never got a result. Asks the channel instead of
+     * Plan §11 row 5: SENT intents that never got a result. Asks the channel instead of
      * retrying the call — a retried refund is a second refund.
      */
     @Scheduled(fixedDelayString = "${hub.reconcile.intent-sweep-period-ms:60000}")

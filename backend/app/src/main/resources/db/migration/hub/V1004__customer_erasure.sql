@@ -1,7 +1,7 @@
 -- Flyway Migration V1004__customer_erasure.sql
--- plan §12 Faz 7 + §14: a single customer's erasure request.
+-- Plan §12 Phase 7 + §14: a single customer's erasure request.
 --
--- Partitioning solves BULK expiry — plan §3 drops raw_event partitions past 90 days.
+-- Partitioning solves BULK expiry — Plan §3 drops raw_event partitions past 90 days.
 -- It does not solve a single person asking to be erased today, which is a different
 -- problem with a different answer: find their data wherever it sits and redact it.
 

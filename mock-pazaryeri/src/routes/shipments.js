@@ -4,7 +4,7 @@ const store = require('../state');
 
 const router = express.Router();
 
-// Idempotent on intentId — the exact behavior the Faz 1 gate checks: calling this
+// Idempotent on intentId — the exact behavior the Phase 1 gate checks: calling this
 // twice with the same intentId must create exactly one shipment, not two.
 router.post('/shipments', (req, res) => {
   const state = store.get();
@@ -14,7 +14,7 @@ router.post('/shipments', (req, res) => {
     return res.status(400).json({ error: 'intentId is required' });
   }
 
-  // Whole-call failure, for the plan Faz 5 gate that drives the shipment step into
+  // Whole-call failure, for the Plan Phase 5 gate that drives the shipment step into
   // the DLQ and the operator queue.
   if (state.scenarios.shipmentFails) {
     return res.status(500).json({ error: 'simulated shipment failure' });

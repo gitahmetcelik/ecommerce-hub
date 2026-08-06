@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * plan §4.3 / §3 kanal_cagri_niyeti: every side-effecting connector call (ship a
+ * Plan §4.3 / §3 kanal_cagri_niyeti: every side-effecting connector call (ship a
  * package, decide a return, refund money) goes through this three-step flow —
  * <ol>
  *   <li>{@link #prepare} commits a PREPARED row <em>before</em> anything is sent</li>
@@ -22,9 +22,9 @@ import java.util.UUID;
  *   <li>{@link #recordResult} commits RESULT_RECEIVED after a response comes back</li>
  * </ol>
  * A crash between steps 2 and 3 leaves a row stuck at SENT. The engine is
- * at-least-once (plan §1), so retrying naively would re-issue the call — a second
+ * at-least-once (Plan §1), so retrying naively would re-issue the call — a second
  * shipping label, a second refund. {@link #recoverStuckIntents} is what a restart (or
- * the continuous reconcile pass, plan §11) must call instead: it asks the channel what
+ * the continuous reconcile pass, Plan §11) must call instead: it asks the channel what
  * actually happened rather than repeating the side effect.
  */
 @Service
@@ -96,8 +96,8 @@ public class ChannelCallIntentService {
     /**
      * Resolves every SENT intent older than {@code minAge} by asking the channel what
      * happened, instead of assuming failure and re-calling. An intent the resolver can't
-     * resolve either is marked AMBIGUOUS and escalated to the operator queue (plan §3:
-     * "sonuç alınamıyorsa BELIRSİZ → operatör kuyruğu") rather than left to retry forever.
+     * resolve either is marked AMBIGUOUS and escalated to the operator queue (Plan §3:
+     * "when no outcome can be established: AMBIGUOUS, then the operator queue") rather than left to retry forever.
      */
     @Transactional
     public int recoverStuckIntents(IntentStatusResolver resolver, java.time.Duration minAge) {

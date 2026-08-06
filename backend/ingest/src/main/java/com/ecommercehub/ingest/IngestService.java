@@ -12,12 +12,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * plan §4.1 (event-layer idempotency) + the outbox pattern (raw_event and work_batch
- * committed together, plan §1.6's "aynı transaction" requirement): the one and only
+ * Plan §4.1 (event-layer idempotency) + the outbox pattern (raw_event and work_batch
+ * committed together, Plan §1.6's "the same transaction" requirement): the one and only
  * writer of hub.raw_event on the ingest path.
  *
- * <p>The <200ms ACK requirement (plan Faz 2) is why this is two INSERTs and nothing
- * else — no synchronous order processing happens here; the dispatcher (Faz 0b) picks
+ * <p>The <200ms ACK requirement (Plan Phase 2) is why this is two INSERTs and nothing
+ * else — no synchronous order processing happens here; the dispatcher (Phase 0b) picks
  * up the work_batch row on its own schedule.
  */
 @Service
@@ -79,9 +79,9 @@ public class IngestService {
     private void writeWorkBatch(UUID organizationId, UUID channelConnectionId, String channelEventId,
                                  String traceId, OrderEventPayload payload) {
         try {
-            // plan §4.2: is_anahtari for 'olay-isle' is the channel event id — an event
+            // Plan §4.2: is_anahtari for 'olay-isle' is the channel event id — an event
             // is inherently one-shot, a repeat should never re-run it. work_batch.task_key
-            // holds this raw business key; the dispatcher (plan §1.1) is the only place
+            // holds this raw business key; the dispatcher (Plan §1.1) is the only place
             // that combines it into the full org:type:key TaskKey text.
             String payloadJson = objectMapper.writeValueAsString(payload);
 

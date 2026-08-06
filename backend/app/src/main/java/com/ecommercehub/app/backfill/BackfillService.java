@@ -28,9 +28,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * plan Faz 3: one page per call, cursor persisted after every page (plan §3
- * "sayfa imleci kalıcı"), always through the BACKGROUND budget class (plan §9:
- * "Backfill daima ARKAPLAN'dadır"). If the budget has nothing left this tick,
+ * Plan Phase 3: one page per call, cursor persisted after every page (Plan §3
+ * "the page cursor is persistent"), always through the BACKGROUND budget class (Plan §9:
+ * "backfill always runs in the BACKGROUND class"). If the budget has nothing left this tick,
  * the call is a no-op — the scheduler just tries again later, never blocks.
  */
 @Service

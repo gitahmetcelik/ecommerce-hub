@@ -16,8 +16,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Plan §4.2: "tekrar çalışması gereken her görevde is_anahtari bir nesil/pencere
- * bileşeni içermek zorundadır" — a repeatable task type's business key must fold in
+ * Plan §4.2: every task type that is meant to run again must fold a generation or window
+ * component into its business key — a repeatable task type's business key must include
  * whatever changes between legitimate repeats (a window start, a generation counter),
  * or every subsequent attempt collapses into the first one forever. This exercises
  * the actual mechanism the dispatcher relies on: the engine's own

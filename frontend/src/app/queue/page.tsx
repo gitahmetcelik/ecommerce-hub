@@ -13,7 +13,7 @@ export default function QueuePage() {
 }
 
 /**
- * plan §3: the operator queue is where work needing a human decision lands, and it is
+ * Plan §3: the operator queue is where work needing a human decision lands, and it is
  * deliberately separate from the engine's dead-letter queue. The DLQ holds tasks that
  * failed; this holds situations that no amount of retrying will resolve.
  */

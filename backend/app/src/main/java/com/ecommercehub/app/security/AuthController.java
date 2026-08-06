@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.UUID;
 
-/** plan §10. Thin: every decision lives in {@link AuthenticationService}. */
+/** Plan §10. Thin: every decision lives in {@link AuthenticationService}. */
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -63,7 +63,7 @@ public class AuthController {
 
     /**
      * The invitation token is returned in the response rather than emailed. Email
-     * delivery is out of scope for v1 (plan §13 keeps messaging out), and pretending
+     * delivery is out of scope for v1 (Plan §13 keeps messaging out), and pretending
      * otherwise would mean an invite flow nobody can complete.
      */
     @PostMapping("/invitations")

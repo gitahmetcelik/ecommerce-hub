@@ -11,7 +11,7 @@ import java.net.http.HttpClient;
 import java.util.EnumSet;
 import java.util.Set;
 
-/** Registers every available PlatformConnector — only Mock exists so far (Faz 1/§14 decision). */
+/** Registers every available PlatformConnector — only Mock exists so far (Phase 1/§14 decision). */
 @Configuration
 public class ConnectorConfig {
 
@@ -22,7 +22,7 @@ public class ConnectorConfig {
     }
 
     /**
-     * The other side of plan §7's capability branch: a channel where <em>we</em> issue the
+     * The other side of Plan §7's capability branch: a channel where <em>we</em> issue the
      * refund. Registered as a distinct channel type so both branches of the return flow
      * exist in one running application — with only the default profile, the REFUND_BY_US
      * path would be code that never executes anywhere, which is how it stays broken.

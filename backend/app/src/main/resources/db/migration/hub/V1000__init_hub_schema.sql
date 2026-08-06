@@ -420,11 +420,11 @@ CREATE TABLE hub.channel_push (
 -- =============================================================================
 -- 10. EVENT & AUDIT
 -- =============================================================================
--- Monthly-partitioned (plan §3): 90-day retention is a partition DROP, not a
+-- Monthly-partitioned (Plan §3): 90-day retention is a partition DROP, not a
 -- row-by-row DELETE — the whole reason to partition an append-only audit trail.
 -- A unique/primary key on a partitioned table must include the partition key
 -- column (received_at) — a Postgres requirement, not a design choice; duplicate
--- webhook detection (plan §4.1) is therefore exact within a partition and only
+-- webhook detection (Plan §4.1) is therefore exact within a partition and only
 -- approximate across a month boundary, an accepted tradeoff for redelivered
 -- webhooks which arrive within seconds/minutes, never months apart.
 CREATE TABLE hub.raw_event (
@@ -468,7 +468,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA hub GRANT SELECT, INSERT, UPDATE, DELETE ON T
 ALTER DEFAULT PRIVILEGES IN SCHEMA hub GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hub_system;
 
 -- =============================================================================
--- POSTGRES ROW LEVEL SECURITY (RLS) POLICIES (plan §3 a-d)
+-- POSTGRES ROW LEVEL SECURITY (RLS) POLICIES (Plan §3 a-d)
 -- =============================================================================
 
 DO $$

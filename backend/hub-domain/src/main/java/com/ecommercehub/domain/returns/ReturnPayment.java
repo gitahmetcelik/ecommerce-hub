@@ -15,7 +15,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3 (v4): one refund payment. This row — not the return — is what a refund
+ * Plan §3 (v4): one refund payment. This row — not the return — is what a refund
  * intent points at, because a partial return produces more than one payment and
  * "one intent per return" would make the second one permanently impossible.
  *

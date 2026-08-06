@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 // One work_batch row per dispatch cycle. Without this the test hands the engine four
 // events at once and they are processed concurrently, which makes half of them arrive at
-// the state machine out of order, defer (plan §6 ERTELENDI), and then wait out the
+// the state machine out of order, defer (Plan §6 ERTELENDI), and then wait out the
 // engine's exponential backoff. That concurrency is the test's own invention — a real
 // channel spaces its events out, and the storylines already model the ordering hazards
 // that matter deliberately rather than by accident.
@@ -145,7 +145,7 @@ public class StorylineGateTests extends AbstractTestcontainersTest {
         dispatchAll();
 
         // Ordering the source never had cannot be restored downstream — the state machine
-        // absorbs it (plan §0), and PAID is not undone by the order.created that follows.
+        // absorbs it (Plan §0), and PAID is not undone by the order.created that follows.
         awaitItemStatus("SC-OOO", "PAID");
     }
 
@@ -179,7 +179,7 @@ public class StorylineGateTests extends AbstractTestcontainersTest {
         runStoryline("same-second", "{\"orderNumber\":\"SC-SEC\",\"sku\":\"SKU-3\"}");
         dispatchAll();
 
-        // plan §6 (v3): the timestamp rule alone dropped the second same-second event
+        // Plan §6 (v3): the timestamp rule alone dropped the second same-second event
         // silently; the sequence number is what resolves the pair.
         awaitItemStatus("SC-SEC", "PAID");
     }
@@ -194,7 +194,7 @@ public class StorylineGateTests extends AbstractTestcontainersTest {
         runStoryline("partial-cancel", "{\"orderNumber\":\"SC-PARTIAL\"}");
         dispatchAll();
 
-        // Order status is derived from its lines (plan §0) — a single column set by
+        // Order status is derived from its lines (Plan §0) — a single column set by
         // whoever wrote last could not express this at all.
         awaitDerivedStatus("SC-PARTIAL", "PARTIALLY_CANCELLED");
     }
@@ -205,7 +205,7 @@ public class StorylineGateTests extends AbstractTestcontainersTest {
         runStoryline("unknown-item", "{\"orderNumber\":\"SC-UNKNOWN\"}");
         dispatchAll();
 
-        // plan §3: an unmatched line is never silently dropped — its stock cannot be
+        // Plan §3: an unmatched line is never silently dropped — its stock cannot be
         // deducted, so dropping it is an order that quietly never touched inventory.
         awaitCount("the unmatched line to reach the review queue",
                 "SELECT count(*) FROM hub.mapping_candidate WHERE organization_id = ? AND status = 'PENDING'", 1);

@@ -1,7 +1,7 @@
 package com.ecommercehub.domain.push;
 
 /**
- * PENDING and SENT are plan §3's two states. SENDING is the in-flight marker that
+ * PENDING and SENT are Plan §3's two states. SENDING is the in-flight marker that
  * keeps two overlapping send windows from picking the same row twice; it is not a
  * terminal state and every path out of it (success, failure, or a value that changed
  * underneath) goes through the generation CAS.

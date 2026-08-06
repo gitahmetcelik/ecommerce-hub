@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * plan §3 "Giden push": the coalescing table's only writer.
+ * Plan §3 "Giden push": the coalescing table's only writer.
  *
  * <p>Every operation here is a single statement on purpose. The upsert is the
  * coalescing itself (a new value updates the one row for (connection, variant, type)
@@ -21,7 +21,7 @@ import java.util.UUID;
 public class ChannelPushStore {
 
     /**
-     * plan §3: "Yeni değişiklik satırı günceller (upsert), yeni satır eklemez".
+     * Plan §3: "a new value updates the row (upsert) rather than appending another".
      *
      * <p>The DO UPDATE is skipped when the target value is unchanged. Without that
      * guard, a stock movement that leaves a channel's sellable quantity identical
@@ -57,7 +57,7 @@ public class ChannelPushStore {
             """;
 
     /**
-     * plan §3's closing condition, verbatim: {@code WHERE id = ? AND nesil = :okunanNesil}.
+     * Plan §3's closing condition, verbatim: {@code WHERE id = ? AND nesil = :okunanNesil}.
      * Zero rows affected means a new value landed while this send was in flight — the row
      * is already back at PENDING carrying the newer value, and reporting success here
      * would strand the channel on the old one forever.

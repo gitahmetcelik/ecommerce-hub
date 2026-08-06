@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * plan §0/§7: "Manuel onay timeout — 24s hatırlatma, 48s ZAMAN_AŞIMI + eskalasyon".
+ * Plan §0/§7: "manual approval timeout: a reminder at 24h, TIMED_OUT plus escalation at 48h".
  *
  * <p><b>Nothing here decides anything.</b> The 48-hour deadline escalates the return to
  * a human; it does not reject it. An automatic rejection would be a customer-visible

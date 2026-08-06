@@ -11,8 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * plan §8: "Her connector implementasyonunun geçmesi gereken ortak, soyut test
- * sınıfı." Every concrete PlatformConnector's test class extends this and implements
+ * Plan §8: the shared, abstract test class every connector implementation has to pass.
+ * Every concrete PlatformConnector's test class extends this and implements
  * the hooks below against whatever backs that connector — MockPlatformConnector's
  * hooks talk to mock-pazaryeri's /_admin endpoints; a real channel's would use
  * WireMock or a sandbox account instead. The test bodies here never change per
@@ -159,7 +159,7 @@ public abstract class ConnectorContractTest {
         ShipmentResult second = connector().createShipment(connection(), request, intent);
 
         assertThat(second.trackingNumber())
-                .withFailMessage("plan §8: repeating a call with the same intent must produce one channel-side effect, not two")
+                .withFailMessage("Plan §8: repeating a call with the same intent must produce one channel-side effect, not two")
                 .isEqualTo(first.trackingNumber());
     }
 }

@@ -4,8 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Plan §4.4: retention on the engine's own tables (no built-in cleanup there — verified
- * by reading its migrations, plan §1.3) and on hub.raw_event's monthly partitions (§3, §12
- * Faz 7 gate). "Süre görev tipi bazında ayarlanır" (per-task-type retention) is honored
+ * by reading its migrations, Plan §1.3) and on hub.raw_event's monthly partitions (§3, §12
+ * Phase 7 gate). "the retention period is configured per task type" (per-task-type retention) is honored
  * through {@link #motorTaskRetentionDaysByType}; anything not listed falls back to
  * {@link #motorTaskRetentionDaysDefault}.
  */

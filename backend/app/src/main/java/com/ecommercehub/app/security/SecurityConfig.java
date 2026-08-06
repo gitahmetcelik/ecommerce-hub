@@ -21,12 +21,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * plan §10. Stateless: there is no server-side session, the access token is the whole
+ * Plan §10. Stateless: there is no server-side session, the access token is the whole
  * credential, and revocation is handled by the refresh token's database row.
  *
  * <p>Two things here are deliberately <em>not</em> authenticated with a bearer token.
  * The webhook endpoints authenticate with the channel's HMAC signature over the raw
- * body (Faz 2) — a channel has no user account to log in as. And the auth endpoints
+ * body (Phase 2) — a channel has no user account to log in as. And the auth endpoints
  * themselves obviously cannot require a token to obtain one.
  */
 @Configuration
@@ -34,7 +34,7 @@ import java.util.List;
 public class SecurityConfig {
 
     /**
-     * BCrypt rather than Argon2id (plan §10 allows either). Argon2 in Spring Security
+     * BCrypt rather than Argon2id (Plan §10 allows either). Argon2 in Spring Security
      * needs BouncyCastle on the classpath; BCrypt is already there, is not the weak
      * link in this system, and can be swapped later by changing this one bean —
      * stored hashes carry their own algorithm prefix, so a migration re-encodes on
@@ -51,7 +51,7 @@ public class SecurityConfig {
     }
 
     /**
-     * plan Faz 6: the dashboard runs on its own origin, so the browser preflights every
+     * Plan Phase 6: the dashboard runs on its own origin, so the browser preflights every
      * call. The allowed origins are configured, never wildcarded — {@code *} would let
      * any page on the internet call this API with a user's token if it could get one.
      */
@@ -84,7 +84,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers("/auth/login", "/auth/refresh", "/auth/logout",
                             "/auth/invitations/accept", "/auth/password-reset/**").permitAll()
-                    // HMAC-authenticated (plan §3): the signature is verified over the
+                    // HMAC-authenticated (Plan §3): the signature is verified over the
                     // raw body inside the ingest path, not here.
                     .requestMatchers("/webhooks/**").permitAll()
                     .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()

@@ -1,5 +1,5 @@
 /**
- * plan §10 changed what a session is. The webhook platform stored one long-lived API
+ * Plan §10 changed what a session is. The webhook platform stored one long-lived API
  * key; this platform has real users, a short-lived access token and a revocable
  * refresh token, so the two are kept separately and the access token is expected to
  * expire and be replaced rather than to last.

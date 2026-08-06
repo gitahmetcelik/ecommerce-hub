@@ -10,7 +10,7 @@ router.get('/catalog', (req, res) => {
 
   const start = (page - 1) * pageSize;
   // Stock is folded into the catalog feed the way a real marketplace does it — the
-  // nightly reconcile (plan §11) walks this feed instead of making a second call per
+  // nightly reconcile (Plan §11) walks this feed instead of making a second call per
   // sku. null (not 0) when the channel has never been told a quantity, so the reconcile
   // can tell "no opinion" apart from "genuinely zero" and skip the former.
   const pageItems = state.catalog.slice(start, start + pageSize).map((item) => ({

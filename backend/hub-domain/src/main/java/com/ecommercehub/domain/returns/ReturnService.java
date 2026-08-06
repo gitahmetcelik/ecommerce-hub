@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §7's return state machine, minus the parts that talk to a channel (those are
+ * Plan §7's return state machine, minus the parts that talk to a channel (those are
  * {@code ReturnFulfilmentService}, which needs the connector layer).
  *
  * <p><b>Authorisation is enforced here, not in the controller.</b> Approving a return
@@ -111,7 +111,7 @@ public class ReturnService {
         return request;
     }
 
-    /** plan §7: OPERATOR or higher. */
+    /** Plan §7: OPERATOR or higher. */
     @Transactional
     public ReturnRequest approve(AuthenticatedUser actor, UUID returnRequestId) {
         requireRole(actor, HubRole.OPERATOR, "approve a return");
@@ -128,7 +128,7 @@ public class ReturnService {
         return request;
     }
 
-    /** plan §7: OPERATOR or higher. Rejection is always a human act — nothing auto-rejects. */
+    /** Plan §7: OPERATOR or higher. Rejection is always a human act — nothing auto-rejects. */
     @Transactional
     public ReturnRequest reject(AuthenticatedUser actor, UUID returnRequestId, String reason) {
         requireRole(actor, HubRole.OPERATOR, "reject a return");
@@ -147,7 +147,7 @@ public class ReturnService {
 
     /**
      * The goods came back. Sellable units go to on_hand, damaged ones to damaged
-     * (plan §3's reservation table) — the counters are separate because damaged stock
+     * (Plan §3's reservation table) — the counters are separate because damaged stock
      * is not stock you can sell, and merging them would advertise it.
      */
     @Transactional
@@ -222,7 +222,7 @@ public class ReturnService {
 
     /**
      * The return label now exists — whether we asked the channel for it or merely
-     * recorded the one it made (plan §7).
+     * recorded the one it made (Plan §7).
      *
      * <p>This and {@link #markRefunded} exist as named transitions rather than a public
      * {@code moveTo(status)} because the fulfilment step lives in another module: an
@@ -244,7 +244,7 @@ public class ReturnService {
     }
 
     /**
-     * plan §7: the return-label step failed again.
+     * Plan §7: the return-label step failed again.
      *
      * <p>The engine's own retry eventually drops the task in the DLQ, and that alone is
      * not enough — a DLQ is a place failures go to be forgotten unless somebody is

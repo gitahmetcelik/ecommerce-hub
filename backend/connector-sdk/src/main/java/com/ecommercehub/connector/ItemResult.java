@@ -1,7 +1,7 @@
 package com.ecommercehub.connector;
 
 /**
- * plan §8 KalemSonuc: "Per-item sonuç zorunlu — kısmi başarı ifade edilebilmeli." A
+ * Plan §8 KalemSonuc: "per-item results are mandatory, so partial success can be expressed" A
  * single result object for a bulk call would hide which of 1000 SKUs actually
  * failed. referenceId is a sku for stock/price bulk updates and a channelReturnId
  * for submitReturnDecision — the plan reuses one result shape across both, so this

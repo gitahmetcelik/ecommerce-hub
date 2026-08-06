@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * plan §6's decision table as a pure function — no side effects, no persistence,
+ * Plan §6's decision table as a pure function — no side effects, no persistence,
  * just "given where an item is and where an event wants to send it, what happens."
  *
  * <pre>
@@ -28,7 +28,7 @@ public final class OrderItemTransitionDecision {
     }
 
     // Terminal states only make sense from specific stages of the mainline — reachable
-    // FROM these particular statuses, nothing else (plan doesn't spell out an exact
+    // FROM these particular statuses, nothing else (Plan doesn't spell out an exact
     // matrix; this is a defensible minimal reading, not load-bearing business logic).
     private static final Map<OrderItemStatus, Set<OrderItemStatus>> ALLOWED_TERMINAL_SOURCES = Map.of(
             OrderItemStatus.CANCELLED, Set.of(OrderItemStatus.CREATED, OrderItemStatus.AWAITING_PAYMENT, OrderItemStatus.PAID),

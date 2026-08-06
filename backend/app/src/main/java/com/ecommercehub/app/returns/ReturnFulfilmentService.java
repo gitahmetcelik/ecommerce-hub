@@ -43,17 +43,17 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The two steps of plan §7 that reach a channel: creating the return label and paying
+ * The two steps of Plan §7 that reach a channel: creating the return label and paying
  * the refund.
  *
  * <p><b>Both branch on the capability matrix, and neither knows which channel it is
  * talking to.</b> If the channel produces its own return label, RETURN_SHIPMENT_CREATED
  * is something we record rather than cause. If the channel is the merchant of record,
- * the refund is likewise observed and no call is made. plan §7 is explicit that the
+ * the refund is likewise observed and no call is made. Plan §7 is explicit that the
  * state machine must not have channel types baked into it — it reads
  * {@link Capability}, and every channel takes the same path through these two methods.
  *
- * <p><b>Both go through {@link ChannelCallIntentService}</b>, in the plan §4.3 order:
+ * <p><b>Both go through {@link ChannelCallIntentService}</b>, in the Plan §4.3 order:
  * the domain row (shipment / return_payment) commits first, then a PREPARED intent
  * pointing at it, then SENT commits <em>before</em> the call leaves. A crash between
  * the call and the response therefore leaves a SENT intent, and recovery asks the
@@ -127,7 +127,7 @@ public class ReturnFulfilmentService {
             return observeChannelShipment(organizationId, context);
         }
 
-        // plan §3: the domain row commits first, so the intent's UNIQUE(org, type,
+        // Plan §3: the domain row commits first, so the intent's UNIQUE(org, type,
         // target_reference) lands on a shipment that already exists. Doing it the other
         // way round would key the intent on nothing.
         //
@@ -159,7 +159,7 @@ public class ReturnFulfilmentService {
             // Counted and escalated in its own transaction, then rethrown so the engine's
             // retry (and eventually its DLQ) still happens. Swallowing it here would turn
             // "the label was never created" into a silent success, which is the exact
-            // failure plan §7 calls out.
+            // failure Plan §7 calls out.
             inTransaction(organizationId, () -> returnService.recordShipmentFailure(
                     organizationId, returnRequestId, shipmentMaxAttempts, String.valueOf(e.getMessage())));
             throw e;
@@ -213,7 +213,7 @@ public class ReturnFulfilmentService {
                         shipmentId, toJson(Map.of("returnRequestId", returnRequestId.toString()))));
     }
 
-    /** plan §7: the channel makes the label, we only write down that it exists. */
+    /** Plan §7: the channel makes the label, we only write down that it exists. */
     private Shipment observeChannelShipment(UUID organizationId, Context context) {
         log.info("Channel {} produces its own return label — recording it rather than requesting one",
                 context.connection().getChannelType());
@@ -231,7 +231,7 @@ public class ReturnFulfilmentService {
     /**
      * Pays the refund, or records that the channel paid it.
      *
-     * <p>plan §7 puts this behind ADMIN, and the check is here rather than in a
+     * <p>Plan §7 puts this behind ADMIN, and the check is here rather than in a
      * controller so it holds for every caller.
      */
     public ReturnPayment issueRefund(AuthenticatedUser actor, UUID returnRequestId) {
@@ -262,8 +262,8 @@ public class ReturnFulfilmentService {
     }
 
     /**
-     * plan §7: "Parayı kanal iade ediyorsa PARA_IADE_EDILDI bizim eylemimiz değil,
-     * gözlemlediğimiz olaydır" — no call is made, and reconcile confirms it later.
+     * Plan §7: when the channel is the one refunding, REFUNDED is an event we observe
+     * rather than an action of ours — no call is made, and reconcile confirms it later.
      */
     private ReturnPayment observeChannelRefund(UUID organizationId, UUID returnRequestId, ReturnPayment payment) {
         log.info("Return {} is refunded by the channel — recording the observation, making no call", returnRequestId);

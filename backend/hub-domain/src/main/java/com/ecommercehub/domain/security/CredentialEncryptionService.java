@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * AES-GCM encryption for channel_connection.encrypted_credentials (plan §3). pgcrypto is
+ * AES-GCM encryption for channel_connection.encrypted_credentials (Plan §3). pgcrypto is
  * deliberately not used — encryption happens in the application layer so key material never
  * has to live in the database.
  *

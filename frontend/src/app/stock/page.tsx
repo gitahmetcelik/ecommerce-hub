@@ -54,7 +54,7 @@ function Stock() {
     <>
       <PageHeader
         title="Stock"
-        description="Discrepancies are reported and never auto-corrected (plan §0) — the correction is the action a human wants to see before it happens."
+        description="Discrepancies are reported and never auto-corrected (Plan §0) — the correction is the action a human wants to see before it happens."
       />
 
       <section className="mb-10">

@@ -12,8 +12,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Minimal shape for Faz 2 — full catalog matching (channel_product_mapping,
- * mapping_candidate) is Faz 3. Order processing in this phase creates a variant
+ * Minimal shape for Phase 2 — full catalog matching (channel_product_mapping,
+ * mapping_candidate) is Phase 3. Order processing in this phase creates a variant
  * directly from a channel SKU when no mapping exists yet.
  */
 @Entity

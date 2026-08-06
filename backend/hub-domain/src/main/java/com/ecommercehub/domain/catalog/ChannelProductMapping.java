@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3: sku, barcode, and channel_variant_id are three separate concepts, never
+ * Plan §3: sku, barcode, and channel_variant_id are three separate concepts, never
  * substituted for one another — this row is the durable link between "the channel's
  * idea of this item" and "our variant", however it was established.
  */

@@ -19,7 +19,7 @@ import java.util.UUID;
 /**
  * Creates the first administrator of an organization.
  *
- * <p><b>Why this has to exist.</b> plan §10 has an organization admin invite users, and
+ * <p><b>Why this has to exist.</b> Plan §10 has an organization admin invite users, and
  * §13 puts self-service onboarding out of scope for v1. Between the two there was no way
  * to get the <em>first</em> admin: inviting requires an ADMIN, and there was none. A
  * freshly deployed hub could not be logged into at all.

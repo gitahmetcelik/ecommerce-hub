@@ -8,7 +8,7 @@ import { storeSession } from "@/lib/auth";
 /**
  * The organization id is part of the form, not derived from the email.
  *
- * <p>Emails are unique per organization, not globally (plan §10) — the same person can
+ * <p>Emails are unique per organization, not globally (Plan §10) — the same person can
  * work for two tenants — so an email alone does not identify an account. A global email
  * would have been friendlier here and a worse constraint everywhere else.
  */

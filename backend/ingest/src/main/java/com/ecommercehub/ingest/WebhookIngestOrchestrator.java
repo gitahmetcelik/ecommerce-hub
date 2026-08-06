@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §3(c): everything from setting the RLS tenant context onward must run inside
+ * Plan §3(c): everything from setting the RLS tenant context onward must run inside
  * one transaction — this class is that transaction. The controller stays a thin
  * byte-reading adapter (see WebhookController) precisely so this invariant lives in
  * exactly one place instead of being re-derived per endpoint.

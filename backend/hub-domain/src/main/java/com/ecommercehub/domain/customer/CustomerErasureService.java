@@ -19,9 +19,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §12 Faz 7 / §14: one person's erasure request.
+ * Plan §12 Phase 7 / §14: one person's erasure request.
  *
- * <p><b>Why the partitions are not enough.</b> plan §3 keeps raw_event partitioned so
+ * <p><b>Why the partitions are not enough.</b> Plan §3 keeps raw_event partitioned so
  * that expiry is a DROP rather than a scan. That answers "everything older than 90
  * days"; it does not answer "this person, today" — and a request from a real customer
  * is always the second kind. Their name and address sit verbatim inside raw_event

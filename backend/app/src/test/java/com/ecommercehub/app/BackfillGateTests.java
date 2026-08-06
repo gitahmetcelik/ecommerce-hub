@@ -23,8 +23,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * plan Faz 3 gate: resumable backfill against a real mock-pazaryeri instance —
- * MockPlatformConnector (already wired in the app context, plan Faz 1) talks to
+ * Plan Phase 3 gate: resumable backfill against a real mock-pazaryeri instance —
+ * MockPlatformConnector (already wired in the app context, Plan Phase 1) talks to
  * whichever base URL is decrypted from this test's own channel_connection row, so
  * no separate connector bean is needed per test.
  */
@@ -83,7 +83,7 @@ public class BackfillGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: backfill runs catalog to completion, then orders to completion, without skipping either")
+    @DisplayName("Phase 3 gate: backfill runs catalog to completion, then orders to completion, without skipping either")
     void backfillCompletesCatalogThenOrders() {
         BackfillCursor cursor = runUntilComplete();
 
@@ -100,7 +100,7 @@ public class BackfillGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: resuming backfill after a simulated crash continues from the cursor, no duplicate rows")
+    @DisplayName("Phase 3 gate: resuming backfill after a simulated crash continues from the cursor, no duplicate rows")
     void resumingAfterCrashDoesNotDuplicate() {
         // Run partway, "crash" (nothing to undo — the whole point is the cursor already
         // survived on channel_connection.backfill_status), then keep going to completion.
@@ -129,13 +129,13 @@ public class BackfillGateTests extends AbstractTestcontainersTest {
     }
 
     @Test
-    @DisplayName("Faz 3 gate: backfill always runs under the BACKGROUND budget class, leaving INTERACTIVE untouched")
+    @DisplayName("Phase 3 gate: backfill always runs under the BACKGROUND budget class, leaving INTERACTIVE untouched")
     void backfillUsesBackgroundBudgetLeavingInteractiveIntact() {
         RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
 
-        // Drain BACKGROUND directly, simulating a backfill deep in its run — plan §9's
+        // Drain BACKGROUND directly, simulating a backfill deep in its run — Plan §9's
         // separation is what lets a stock push triggered mid-backfill still go through
-        // instead of waiting behind it (Faz 4 builds the actual push; this pins the
+        // instead of waiting behind it (Phase 4 builds the actual push; this pins the
         // budget mechanism the backfill path itself calls into).
         int backgroundCapacity = 0;
         while (budget.tryAcquire(BudgetClass.BACKGROUND)) {

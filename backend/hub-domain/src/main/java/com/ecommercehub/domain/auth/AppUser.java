@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §10. A user belongs to exactly one organization — the same human working for
+ * Plan §10. A user belongs to exactly one organization — the same human working for
  * two organizations is two accounts, which is why the email uniqueness constraint is
  * (organization_id, email) and not email alone.
  */

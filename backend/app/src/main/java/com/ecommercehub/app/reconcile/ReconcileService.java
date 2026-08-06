@@ -41,12 +41,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * plan §11's reconcile layers, minus the scheduling (see {@link ReconcileScheduler}).
+ * Plan §11's reconcile layers, minus the scheduling (see {@link ReconcileScheduler}).
  *
  * <p>Two rules run through everything here. <b>Nothing is auto-corrected</b> — the
- * nightly stock pass writes stock_discrepancy rows and stops, per plan §0. And
+ * nightly stock pass writes stock_discrepancy rows and stops, per Plan §0. And
  * <b>reconcile is not an event</b>: it re-asserts a target state rather than applying
- * a delta, which is only safe because plan §6's transitions are target-status
+ * a delta, which is only safe because Plan §6's transitions are target-status
  * idempotent. Without that property, a reconcile followed by a deferred webhook for
  * the same transition would decrement stock twice.
  */
@@ -55,7 +55,7 @@ public class ReconcileService {
 
     private static final Logger log = LoggerFactory.getLogger(ReconcileService.class);
 
-    /** plan §8: delta fetches always overlap the previous window by this much. */
+    /** Plan §8: delta fetches always overlap the previous window by this much. */
     private static final Duration SINCE_OVERLAP = Duration.ofMinutes(5);
     private static final int PAGE_SIZE = 100;
 
@@ -96,7 +96,7 @@ public class ReconcileService {
     }
 
     /**
-     * Nightly full stock pass (plan §11, BACKGROUND class): walks the channel's whole
+     * Nightly full stock pass (Plan §11, BACKGROUND class): walks the channel's whole
      * catalog and reports every quantity that disagrees with ours.
      *
      * @return how many drifting variants were reported
@@ -147,7 +147,7 @@ public class ReconcileService {
 
         Optional<UUID> variantId = findMappedVariant(organizationId, channelConnectionId, product.channelVariantId());
         if (variantId.isEmpty()) {
-            // Unmatched channel items are Faz 3's mapping_candidate problem, not a stock
+            // Unmatched channel items are Phase 3's mapping_candidate problem, not a stock
             // drift — reporting them here would flood the drift report with catalog noise.
             return 0;
         }
@@ -168,7 +168,7 @@ public class ReconcileService {
     }
 
     /**
-     * Delta order reconcile (plan §11, OPERATIONAL class): the safety net for webhooks
+     * Delta order reconcile (Plan §11, OPERATIONAL class): the safety net for webhooks
      * that never arrived. Feeds the very same OrderProcessingService the webhook path
      * uses, so a re-observed order takes the identical code path and the identical
      * idempotency guarantees.
@@ -218,10 +218,10 @@ public class ReconcileService {
     }
 
     /**
-     * plan §11 row 2: the hourly return delta pass.
+     * Plan §11 row 2: the hourly return delta pass.
      *
      * <p>This is how a return actually enters the hub. Without it the return flow exists
-     * but nothing ever starts it — plan §7's machine would only ever run for returns
+     * but nothing ever starts it — Plan §7's machine would only ever run for returns
      * somebody typed in by hand.
      *
      * <p>Idempotent by way of {@code channel_return_id}: the overlap window (and any
@@ -275,8 +275,8 @@ public class ReconcileService {
      * Turns one channel return into a hub return, or escalates it.
      *
      * <p>A return we cannot attach to an order and its items is <b>not</b> dropped. That
-     * is the same rule Faz 3 applies to unmatched catalogue items (plan §3: eşleşmemiş
-     * kalem sessizce düşürülmez) and it matters more here — a silently discarded return
+     * is the same rule Phase 3 applies to unmatched catalogue items (Plan §3: an unmatched
+     * line is never silently dropped) and it matters more here — a silently discarded return
      * is a customer waiting for a refund that no one in the system knows is owed.
      */
     private boolean openIfResolvable(UUID organizationId, UUID channelConnectionId, ChannelReturn channelReturn) {

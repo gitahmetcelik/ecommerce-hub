@@ -20,11 +20,11 @@ import java.util.UUID;
 
 /**
  * Opens one send window per channel connection that has pending pushes, by writing a
- * {@code push-send} work_batch row the dispatcher (Faz 0b) picks up like any other work.
+ * {@code push-send} work_batch row the dispatcher (Phase 0b) picks up like any other work.
  *
- * <p>The task key is {@code channelConnectionId:windowStart}, exactly plan §4.2's
+ * <p>The task key is {@code channelConnectionId:windowStart}, exactly Plan §4.2's
  * {@code kanal_baglantisi_id + pencere_baslangic}. Because the engine's idempotency key
- * is globally unique and never expires (plan §1.3), a key without a window component
+ * is globally unique and never expires (Plan §1.3), a key without a window component
  * would let a connection's push task run <em>once, ever</em>, and every later change
  * would be silently swallowed. The window is what makes the key repeat-safe.
  *
@@ -98,7 +98,7 @@ public class PushWindowScheduler {
             // The engine would dedupe a repeat submission by idempotency key anyway; this
             // guard just avoids leaving a second work_batch row behind pointing at the
             // same task, which would make the queue depth reported by the internal screen
-            // (and the Faz 4 load gate) read high for no reason.
+            // (and the Phase 4 load gate) read high for no reason.
             int inserted = systemJdbcTemplate.update("""
                     INSERT INTO hub.work_batch
                         (id, organization_id, channel_connection_id, task_type, task_key, payload, status)

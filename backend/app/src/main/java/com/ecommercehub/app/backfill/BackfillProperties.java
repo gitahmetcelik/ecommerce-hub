@@ -7,7 +7,7 @@ public class BackfillProperties {
 
     private int pageSize = 50;
 
-    /** How often every channel's RateLimitBudget resets to its full share (plan §9: "per period"). */
+    /** How often every channel's RateLimitBudget resets to its full share (Plan §9: "per period"). */
     private long refillPeriodMs = 60_000;
 
     public int getPageSize() {

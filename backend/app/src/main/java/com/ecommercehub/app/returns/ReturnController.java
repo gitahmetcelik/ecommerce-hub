@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * plan §7's operator surface, on the internal screen until the Faz 6 dashboard exists.
+ * Plan §7's operator surface, on the internal screen until the Phase 6 dashboard exists.
  *
  * <p>Note what is <em>not</em> here: no role checks and no organization parameter. The
  * roles are enforced in the services (so every caller hits them, not just this one) and

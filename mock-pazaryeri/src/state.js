@@ -58,7 +58,7 @@ function seed() {
   for (let i = 0; i < 10; i++) {
     state.catalog.push({ id: `product-${i}`, sku: `SKU-${i}`, barcode: `BARCODE-${i}`, title: `Product ${i}` });
   }
-  // Non-ASCII title on purpose (plan §8 contract test: character encoding round-trip).
+  // Non-ASCII title on purpose (Plan §8 contract test: character encoding round-trip).
   state.catalog.push({ id: 'product-tr', sku: 'SKU-TR', barcode: 'BARCODE-TR', title: 'Türkçe Ürün İçeriği 😀' });
   for (let i = 0; i < 5; i++) {
     // Line items mirror the order they came from: a return without lines cannot say

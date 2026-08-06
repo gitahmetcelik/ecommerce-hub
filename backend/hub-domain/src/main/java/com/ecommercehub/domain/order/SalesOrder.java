@@ -15,7 +15,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * derived_status is denormalized from order_item statuses (plan §3) — never written
+ * derived_status is denormalized from order_item statuses (Plan §3) — never written
  * directly by anything except {@link OrderProcessingService}'s recomputation step,
  * which runs inside the same SELECT ... FOR UPDATE transaction as the item change
  * that triggered it.
@@ -48,7 +48,7 @@ public class SalesOrder {
     @Column(nullable = false)
     private BigDecimal total;
 
-    // DB column is CHAR(3) (plan §3's "para kuralı"). columnDefinition alone changes
+    // DB column is CHAR(3) (Plan §3's "the money rule"). columnDefinition alone changes
     // the DDL Hibernate would generate but NOT what it validates against — schema
     // validation compares JDBC type codes, so @JdbcTypeCode(CHAR) is required too,
     // or SessionFactory bootstrap fails outright against the real bpchar column.
@@ -108,7 +108,7 @@ public class SalesOrder {
         return channelEventSequence;
     }
 
-    /** plan §3's money rule: the amount is meaningless without this alongside it. */
+    /** Plan §3's money rule: the amount is meaningless without this alongside it. */
     public String getCurrency() {
         return currency;
     }

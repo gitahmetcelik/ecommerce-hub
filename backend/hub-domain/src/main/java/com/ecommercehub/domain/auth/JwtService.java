@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Mints and verifies access tokens (plan §10).
+ * Mints and verifies access tokens (Plan §10).
  *
  * <p>The organization id is a <em>claim</em>, and everything downstream reads the
  * tenant from here rather than from the request. That is the whole point: before this

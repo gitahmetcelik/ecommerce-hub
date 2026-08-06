@@ -16,7 +16,7 @@ export default function MatchingPage() {
 }
 
 /**
- * plan Faz 3: channel items that could not be matched are queued here rather than
+ * Plan Phase 3: channel items that could not be matched are queued here rather than
  * dropped. An unmatched line cannot have its stock deducted, so a silently discarded
  * one is an order that quietly never affected inventory.
  */

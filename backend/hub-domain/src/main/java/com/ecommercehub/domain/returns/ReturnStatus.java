@@ -1,7 +1,7 @@
 package com.ecommercehub.domain.returns;
 
 /**
- * plan §7's return state machine.
+ * Plan §7's return state machine.
  *
  * <pre>
  * REQUESTED → AWAITING_APPROVAL → (approve) ACCEPTED → RETURN_SHIPMENT_CREATED
@@ -14,7 +14,7 @@ package com.ecommercehub.domain.returns;
  *                                                         REFUNDED
  * </pre>
  *
- * <p>TIMED_OUT is not a rejection. plan §0 is explicit that an automatic rejection is
+ * <p>TIMED_OUT is not a rejection. Plan §0 is explicit that an automatic rejection is
  * unacceptable — it is a customer-visible decision that nobody actually made — so the
  * 48-hour deadline escalates to a human and the return stays open.
  */

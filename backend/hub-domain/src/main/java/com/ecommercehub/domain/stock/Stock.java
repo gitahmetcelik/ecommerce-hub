@@ -12,9 +12,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * plan §3: satilabilir(kanal) = fiziksel - rezerve - tampon(kanal). The buffer term
- * (stock_buffer, per-channel) and oversell detection are Faz 4 — this entity only
- * carries the two counters Faz 2's reservation lifecycle needs. @Version enforces
+ * Plan §3: satilabilir(kanal) = fiziksel - rezerve - tampon(kanal). The buffer term
+ * (stock_buffer, per-channel) and oversell detection are Phase 4 — this entity only
+ * carries the two counters Phase 2's reservation lifecycle needs. @Version enforces
  * that concurrent adjustments (two order items reserving at once) never silently
  * overwrite each other.
  */

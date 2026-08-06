@@ -12,12 +12,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * plan §3/Faz 3: SKU first, then barcode (plan §3: "sku, barkod, kanal_varyant_id üç
- * ayrı kavramdır; biri diğerinin yerine kullanılmaz" — barcode is only ever a
- * fallback, never conflated with sku). Anything that doesn't resolve to exactly one
+ * Plan §3/Phase 3: SKU first, then barcode. Plan §3 treats sku, barcode and the channel's
+ * own variant id as three distinct concepts, none of which substitutes for another —
+ * barcode is only ever a fallback. Anything that does not resolve to exactly one
  * variant — nothing found, or more than one candidate — goes to mapping_candidate
- * and the operator queue instead of being silently dropped or guessed at (Faz 3 gate:
- * "hiçbiri sessizce düşmez").
+ * and the operator queue instead of being silently dropped or guessed at (Phase 3 gate:
+ * "none of them is silently dropped").
  */
 @Service
 public class CatalogMatchingService {
@@ -46,7 +46,7 @@ public class CatalogMatchingService {
     }
 
     /**
-     * plan Faz 3 backfill: unlike {@link #resolve}, this trusts the channel's own
+     * Plan Phase 3 backfill: unlike {@link #resolve}, this trusts the channel's own
      * catalog feed as a source of truth and creates a variant when nothing matches —
      * appropriate here specifically because we're importing FROM the catalog, not
      * trying to match an incoming order against an already-established one.
@@ -114,9 +114,9 @@ public class CatalogMatchingService {
     }
 
     /**
-     * plan §3: operator resolves a mapping_candidate by hand — always MANUAL source,
+     * Plan §3: operator resolves a mapping_candidate by hand — always MANUAL source,
      * always audited (who, what, when). The candidate itself does NOT retroactively
-     * heal any order items that were skipped while it was unresolved (plan Faz 3 gate
+     * heal any order items that were skipped while it was unresolved (Plan Phase 3 gate
      * only requires they reached the operator queue without corrupting stock, not
      * automatic backfill-after-the-fact); a human can act on the operator_queue entry.
      */

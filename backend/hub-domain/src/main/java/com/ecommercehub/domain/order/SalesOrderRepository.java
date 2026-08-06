@@ -13,7 +13,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID> {
     Optional<SalesOrder> findByOrganizationIdAndChannelConnectionIdAndChannelOrderNumber(
             UUID organizationId, UUID channelConnectionId, String channelOrderNumber);
 
-    /** plan §3: derived_status recomputation happens under this lock, in the same transaction. */
+    /** Plan §3: derived_status recomputation happens under this lock, in the same transaction. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from SalesOrder o where o.id = ?1")
     Optional<SalesOrder> findByIdForUpdate(UUID id);

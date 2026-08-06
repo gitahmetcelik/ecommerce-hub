@@ -19,7 +19,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 /**
  * One 401 triggers exactly one refresh attempt, then the original request is retried.
  *
- * <p>Access tokens are deliberately short-lived (15 minutes, plan §10), so a 401 in the
+ * <p>Access tokens are deliberately short-lived (15 minutes, Plan §10), so a 401 in the
  * middle of ordinary use is expected rather than exceptional. Without this the user
  * would be bounced to the login screen every quarter of an hour; with an unbounded
  * retry, a genuinely dead session would loop forever.

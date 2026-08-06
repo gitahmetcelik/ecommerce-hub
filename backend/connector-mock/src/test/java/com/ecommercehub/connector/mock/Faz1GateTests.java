@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The literal Faz 1 gate criteria from the plan, as one test class — everything
+ * The literal Phase 1 gate criteria from the plan, as one test class — everything
  * these exercise is also covered more generally by {@link MockPlatformConnectorContractTest},
  * but the plan calls these specific scenarios out by name, so they're worth pinning
  * down exactly as described rather than trusting they fall out of the generic suite.
@@ -85,7 +85,7 @@ class Faz1GateTests {
     }
 
     @Test
-    @DisplayName("Faz 1 gate: 50 seeded orders are fetched across pages and normalized without gaps or duplicates")
+    @DisplayName("Phase 1 gate: 50 seeded orders are fetched across pages and normalized without gaps or duplicates")
     void fetchesAllFiftySeedOrdersAcrossPages() {
         List<ChannelOrder> all = new ArrayList<>();
         Page page = Page.first(7); // an odd page size on purpose — must not divide 50 evenly
@@ -112,7 +112,7 @@ class Faz1GateTests {
     }
 
     @Test
-    @DisplayName("Faz 1 gate: a bulk stock push with 3 failing items reports per-item results correctly, not one big failure")
+    @DisplayName("Phase 1 gate: a bulk stock push with 3 failing items reports per-item results correctly, not one big failure")
     void bulkStockPushWithThreeFailingItemsReportsPerItemResults() throws Exception {
         adminPost("/_admin/scenario", Map.of("failSkus", List.of("SKU-1", "SKU-3", "SKU-5")));
 
@@ -134,7 +134,7 @@ class Faz1GateTests {
     }
 
     @Test
-    @DisplayName("Faz 1 gate: the same intent calling createShipment twice creates exactly one shipment in the channel")
+    @DisplayName("Phase 1 gate: the same intent calling createShipment twice creates exactly one shipment in the channel")
     void repeatedShipmentIntentCreatesExactlyOneShipment() {
         CallIntentRef intent = new CallIntentRef(UUID.randomUUID(), UUID.randomUUID().toString());
         ShipmentRequest request = new ShipmentRequest("order-0");
@@ -147,7 +147,7 @@ class Faz1GateTests {
     }
 
     @Test
-    @DisplayName("Faz 1 gate: on 429, BACKGROUND backs off while INTERACTIVE keeps working against the budget")
+    @DisplayName("Phase 1 gate: on 429, BACKGROUND backs off while INTERACTIVE keeps working against the budget")
     void rateLimitBacksOffBackgroundWithoutAffectingInteractive() throws Exception {
         RateLimitBudget budget = new RateLimitBudget(100);
 
@@ -173,7 +173,7 @@ class Faz1GateTests {
     }
 
     @Test
-    @DisplayName("Faz 1 gate: the mock connector's declared capability matrix is filled in, not empty")
+    @DisplayName("Phase 1 gate: the mock connector's declared capability matrix is filled in, not empty")
     void capabilityMatrixIsFilledIn() {
         Set<Capability> capabilities = connector.capabilities();
 

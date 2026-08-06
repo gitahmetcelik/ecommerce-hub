@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Master key material for channel_connection.encrypted_credentials (plan §3, AES-GCM).
+ * Master key material for channel_connection.encrypted_credentials (Plan §3, AES-GCM).
  * Keys are versioned so rotation never breaks data encrypted under an older key: add a new
  * entry, bump currentKeyVersion, and existing rows stay decryptable via their own stored
  * key_version until something re-encrypts them.

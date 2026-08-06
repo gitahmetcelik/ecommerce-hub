@@ -1,7 +1,7 @@
 package com.ecommercehub.connector.ratelimit;
 
 /**
- * plan §9: reserved shares of a channel connection's rate limit. Priority order is
+ * Plan §9: reserved shares of a channel connection's rate limit. Priority order is
  * declaration order — INTERACTIVE outranks OPERATIONAL outranks BACKGROUND, which is
  * what "unused capacity flows to higher classes, never the reverse" means in
  * {@link RateLimitBudget}.

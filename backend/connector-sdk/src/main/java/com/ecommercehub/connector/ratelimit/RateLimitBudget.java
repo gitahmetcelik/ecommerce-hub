@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * plan §9: a single channel connection's rate-limit budget, split 50/30/20 across
+ * Plan §9: a single channel connection's rate-limit budget, split 50/30/20 across
  * {@link BudgetClass#INTERACTIVE}/{@link BudgetClass#OPERATIONAL}/{@link BudgetClass#BACKGROUND}.
  * A shared, unpartitioned token bucket lets a nightly full reconcile (BACKGROUND) starve
  * the interactive stock push that's the actual anti-oversell mechanism — this exists so
@@ -59,8 +59,8 @@ public class RateLimitBudget {
     }
 
     /**
-     * Only BACKGROUND self-throttles on a 429 (plan §9: "ARKAPLAN sınıfı 429 aldığında
-     * kendini geri çeker, üst sınıfları etkilemez") — INTERACTIVE/OPERATIONAL tokens are
+     * Only BACKGROUND self-throttles on a 429 (Plan §9: the BACKGROUND class backs itself
+     * off without affecting the classes above it) — INTERACTIVE and OPERATIONAL tokens are
      * never touched by this, by design.
      */
     public void reportRateLimited(BudgetClass requested, Duration backoff) {
