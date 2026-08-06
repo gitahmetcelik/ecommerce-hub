@@ -2,6 +2,7 @@ package com.ecommercehub.app.internalscreen;
 
 import com.ecommercehub.app.security.CurrentUser;
 import com.ecommercehub.domain.catalog.CatalogMatchingService;
+import com.ecommercehub.domain.customer.CustomerErasureService;
 import com.ecommercehub.domain.tenant.TenantContextService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -29,13 +30,16 @@ public class InternalScreenController {
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final CatalogMatchingService catalogMatchingService;
+    private final CustomerErasureService customerErasureService;
 
     public InternalScreenController(TenantContextService tenantContextService, JdbcTemplate jdbcTemplate,
-                                     CatalogMatchingService catalogMatchingService) {
+                                     CatalogMatchingService catalogMatchingService,
+                                     CustomerErasureService customerErasureService) {
         this.tenantContextService = tenantContextService;
         this.jdbcTemplate = jdbcTemplate;
         this.namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
         this.catalogMatchingService = catalogMatchingService;
+        this.customerErasureService = customerErasureService;
     }
 
     @GetMapping("/internal/orders")
@@ -177,6 +181,19 @@ public class InternalScreenController {
                        reconcile_interval_minutes, next_reconcile_at, last_order_sync_at, allocation_priority
                 FROM hub.channel_connection ORDER BY created_at
                 """);
+    }
+
+    /**
+     * plan Faz 7: an erasure request. ADMIN-only and irreversible — the role check lives
+     * in the service, like every other one, so it holds for callers that are not this
+     * endpoint.
+     */
+    @PostMapping("/customers/{customerId}/erase")
+    public Map<String, Object> eraseCustomer(@PathVariable UUID customerId) {
+        var result = customerErasureService.erase(CurrentUser.require(), customerId);
+        return Map.of("customerId", result.customerId(),
+                "maskedRawEvents", result.maskedRawEvents(),
+                "alreadyErased", result.alreadyErased());
     }
 
     /** motor.olu_mektup_kutusu has no organization_id (plan §1.1) — this is a system-wide view, not org-scoped. */

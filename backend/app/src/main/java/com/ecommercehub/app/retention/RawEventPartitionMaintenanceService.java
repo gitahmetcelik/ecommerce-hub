@@ -10,6 +10,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Creates and drops hub.raw_event's monthly partitions (plan §3, §4.4, §12 Faz 7 gate).
@@ -27,6 +30,9 @@ import java.time.ZoneOffset;
 public class RawEventPartitionMaintenanceService {
 
     private static final Logger log = LoggerFactory.getLogger(RawEventPartitionMaintenanceService.class);
+
+    /** Matches the names this class creates, and deliberately nothing else. */
+    private static final Pattern PARTITION_NAME = Pattern.compile("raw_event_y(\\d{4})_m(\\d{2})");
 
     private final JdbcTemplate jdbcTemplate;
     private final RetentionProperties properties;
@@ -57,14 +63,53 @@ public class RawEventPartitionMaintenanceService {
         }
     }
 
-    /** Drops partitions whose entire range is older than the retention window. */
+    /**
+     * Drops every partition whose entire range is older than the retention window.
+     *
+     * <p><b>Enumerates what actually exists</b> instead of guessing names inside a
+     * lookback window. The earlier version walked 36 months back from the cutoff and
+     * dropped whatever it found by name; anything older never came up at all, so a
+     * database restored from an old backup — or one where maintenance had been off for a
+     * couple of years — would hold personal data past its retention indefinitely, and
+     * silently. There is no window here to be wrong about.
+     */
     public void dropExpiredPartitions() {
         YearMonth cutoff = YearMonth.from(LocalDate.now(ZoneOffset.UTC).minusDays(properties.getRawEventRetentionDays()));
-        // A generous lookback so nothing is left behind if maintenance hasn't run in a while.
-        YearMonth earliest = cutoff.minusMonths(36);
-        for (YearMonth month = earliest; month.isBefore(cutoff); month = month.plusMonths(1)) {
-            dropPartitionIfPresent(month);
+
+        for (String partitionName : existingPartitionNames()) {
+            YearMonth month = monthOf(partitionName);
+            if (month == null) {
+                // raw_event_default, and anything else not following our naming scheme.
+                // The default partition must survive: it is the catch-all for rows whose
+                // month was never provisioned, and dropping it would start losing writes.
+                continue;
+            }
+            if (month.isBefore(cutoff)) {
+                jdbcTemplate.execute("DROP TABLE hub." + partitionName);
+                log.info("Dropped expired hub.raw_event partition {}", partitionName);
+            }
         }
+    }
+
+    /** Every table currently attached to hub.raw_event. */
+    private List<String> existingPartitionNames() {
+        return jdbcTemplate.queryForList("""
+                SELECT child.relname
+                FROM pg_inherits
+                JOIN pg_class parent ON parent.oid = pg_inherits.inhparent
+                JOIN pg_class child  ON child.oid  = pg_inherits.inhrelid
+                JOIN pg_namespace n  ON n.oid      = parent.relnamespace
+                WHERE n.nspname = 'hub' AND parent.relname = 'raw_event'
+                """, String.class);
+    }
+
+    /** @return the month a partition covers, or null when the name is not one of ours. */
+    private YearMonth monthOf(String partitionName) {
+        Matcher matcher = PARTITION_NAME.matcher(partitionName);
+        if (!matcher.matches()) {
+            return null;
+        }
+        return YearMonth.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
     }
 
     private void createPartitionIfMissing(YearMonth month) {
@@ -86,19 +131,6 @@ public class RawEventPartitionMaintenanceService {
                 "CREATE POLICY org_isolation ON hub.%s USING (organization_id = current_setting('hub.org_id')::uuid) " +
                 "WITH CHECK (organization_id = current_setting('hub.org_id')::uuid)",
                 partitionName));
-    }
-
-    private void dropPartitionIfPresent(YearMonth month) {
-        String partitionName = partitionName(month);
-        Integer exists = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-                "WHERE n.nspname = 'hub' AND c.relname = ?",
-                Integer.class, partitionName);
-        if (exists == null || exists == 0) {
-            return;
-        }
-        jdbcTemplate.execute("DROP TABLE hub." + partitionName);
-        log.info("Dropped expired hub.raw_event partition {}", partitionName);
     }
 
     private String partitionName(YearMonth month) {
