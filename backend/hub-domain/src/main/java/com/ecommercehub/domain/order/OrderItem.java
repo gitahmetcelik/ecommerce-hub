@@ -90,6 +90,11 @@ public class OrderItem {
         return quantity;
     }
 
+    /** What the customer paid per unit — the basis for a refund amount (plan §7). */
+    public BigDecimal getUnitPrice() {
+        return unitPrice;
+    }
+
     public OrderItemStatus getStatus() {
         return status;
     }

@@ -67,6 +67,25 @@ public class ChannelCallIntentService {
         intent.markSent();
     }
 
+    /**
+     * Marks SENT, or does nothing if it already is.
+     *
+     * <p>For the retry path. An intent already at SENT means a previous attempt reached
+     * the channel and we never learned the outcome, so the caller is about to re-issue
+     * the same call with the same idempotency key — which is the designed-safe action,
+     * not an error. {@link #markSent} rejects that transition (correctly, for the
+     * first-attempt path), and using it on a retry turns every second attempt into an
+     * IllegalStateException thrown <em>before</em> the call, which looks like a failure
+     * of the channel rather than of our own bookkeeping.
+     */
+    @Transactional
+    public void markSentIfPrepared(UUID intentId) {
+        ChannelCallIntent intent = getOrThrow(intentId);
+        if (intent.getStatus() == IntentStatus.PREPARED) {
+            intent.markSent();
+        }
+    }
+
     /** Commits RESULT_RECEIVED after the connector call returns (or after durumSorgula resolves it). */
     @Transactional
     public void recordResult(UUID intentId, String channelResponseJson) {
@@ -114,6 +133,19 @@ public class ChannelCallIntentService {
     @Transactional(readOnly = true)
     public Optional<ChannelCallIntent> findById(UUID intentId) {
         return repository.findById(intentId);
+    }
+
+    /**
+     * The existing intent for an action, if there is one.
+     *
+     * <p>Needed by retry paths: a second attempt at the same action must reuse the first
+     * attempt's intent id, because that id is the channel's idempotency key. Minting a
+     * new one would present the retry to the channel as a brand-new request — a second
+     * shipping label, a second refund.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ChannelCallIntent> findByTarget(UUID organizationId, String type, UUID targetReference) {
+        return repository.findByOrganizationIdAndTypeAndTargetReference(organizationId, type, targetReference);
     }
 
     private ChannelCallIntent getOrThrow(UUID intentId) {

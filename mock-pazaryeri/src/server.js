@@ -11,6 +11,7 @@ app.use(require('./routes/stock'));
 app.use(require('./routes/price'));
 app.use(require('./routes/returns'));
 app.use(require('./routes/shipments'));
+app.use(require('./routes/refunds'));
 app.use(require('./routes/callStatus'));
 app.use(require('./routes/auth'));
 app.use(require('./routes/admin'));

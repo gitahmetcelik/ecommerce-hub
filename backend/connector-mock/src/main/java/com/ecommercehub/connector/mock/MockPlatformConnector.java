@@ -16,6 +16,8 @@ import com.ecommercehub.connector.PagedResult;
 import com.ecommercehub.connector.PlatformConnector;
 import com.ecommercehub.connector.PriceUpdate;
 import com.ecommercehub.connector.RawRequest;
+import com.ecommercehub.connector.RefundRequest;
+import com.ecommercehub.connector.RefundResult;
 import com.ecommercehub.connector.ReturnDecision;
 import com.ecommercehub.connector.ShipmentRequest;
 import com.ecommercehub.connector.ShipmentResult;
@@ -57,6 +59,11 @@ public class MockPlatformConnector implements PlatformConnector {
     private static final String SHARED_SIGNING_SECRET = "mock-shared-secret";
     private static final String SIGNATURE_HEADER = "X-Mock-Signature";
 
+    /**
+     * The default profile deliberately lacks {@link Capability#REFUND_BY_US} — most
+     * marketplaces are the merchant of record and refund the customer themselves, so
+     * "we cannot refund" is the common case the domain has to handle, not the exception.
+     */
     private static final Set<Capability> CAPABILITIES = EnumSet.of(
             Capability.FETCH_ORDERS, Capability.FETCH_CATALOG, Capability.STOCK_PUSH, Capability.PRICE_PUSH,
             Capability.RETURN_DECISION_SUBMIT, Capability.SHIPMENT_CREATE,
@@ -64,10 +71,25 @@ public class MockPlatformConnector implements PlatformConnector {
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final String channelType;
+    private final Set<Capability> capabilities;
 
     public MockPlatformConnector(HttpClient httpClient, ObjectMapper objectMapper) {
+        this(httpClient, objectMapper, "MOCK", CAPABILITIES);
+    }
+
+    /**
+     * A second profile under a different channel type, so both sides of the capability
+     * matrix are reachable in one application. Plan §7's return flow branches on
+     * REFUND_BY_US, and a codebase where only one branch is ever exercised has an
+     * untested branch by construction.
+     */
+    public MockPlatformConnector(HttpClient httpClient, ObjectMapper objectMapper,
+                                  String channelType, Set<Capability> capabilities) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
+        this.channelType = channelType;
+        this.capabilities = capabilities;
     }
 
     public MockPlatformConnector() {
@@ -76,12 +98,12 @@ public class MockPlatformConnector implements PlatformConnector {
 
     @Override
     public String channelType() {
-        return "MOCK";
+        return channelType;
     }
 
     @Override
     public Set<Capability> capabilities() {
-        return CAPABILITIES;
+        return capabilities;
     }
 
     @Override
@@ -165,6 +187,23 @@ public class MockPlatformConnector implements PlatformConnector {
         var body = java.util.Map.of("intentId", intent.intentId().toString(), "orderId", request.channelOrderId());
         JsonNode json = post(connection, "/shipments", body);
         return new ShipmentResult(json.get("id").asText(), json.get("trackingNumber").asText());
+    }
+
+    @Override
+    public RefundResult issueRefund(ChannelConnectionRef connection, RefundRequest request, CallIntentRef intent) {
+        if (!capabilities.contains(Capability.REFUND_BY_US)) {
+            throw new UnsupportedOperationException(
+                    channelType + " refunds customers itself — the hub must observe the refund, not issue it");
+        }
+        var body = java.util.Map.of(
+                "intentId", intent.intentId().toString(),
+                "orderId", request.channelOrderId(),
+                "returnId", String.valueOf(request.channelReturnId()),
+                "amount", request.amount().toString(),
+                "currency", request.currency());
+
+        JsonNode json = post(connection, "/refunds", body);
+        return new RefundResult(json.get("id").asText());
     }
 
     @Override

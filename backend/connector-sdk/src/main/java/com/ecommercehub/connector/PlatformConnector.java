@@ -41,6 +41,17 @@ public interface PlatformConnector {
 
     ShipmentResult createShipment(ChannelConnectionRef connection, ShipmentRequest request, CallIntentRef intent);
 
+    /**
+     * Pays a refund. Only callable when {@link Capability#REFUND_BY_US} is present — on
+     * every other channel the marketplace is the merchant of record, refunds the customer
+     * itself, and plan §7 makes REFUNDED an event we observe rather than an act of ours.
+     *
+     * <p>This is the most dangerous call in the interface: it moves real money and is not
+     * naturally idempotent. Like the others it carries an intent, and a call whose outcome
+     * is unknown is resolved with {@link #queryCallStatus}, never by retrying.
+     */
+    RefundResult issueRefund(ChannelConnectionRef connection, RefundRequest request, CallIntentRef intent);
+
     /** Resolves a BELIRSİZ intent — see plan §3/§4.3 and ChannelCallIntentService.recoverStuckIntents. */
     CallStatus queryCallStatus(ChannelConnectionRef connection, CallIntentRef intent);
 

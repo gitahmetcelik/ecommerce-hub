@@ -10,6 +10,8 @@ const DEFAULT_SCENARIOS = {
   outOfOrderOrders: false,    // shuffles order sequence instead of chronological
   credentialsInvalid: false,  // GET /auth/status returns 401
   stockUpdateFails: false,    // POST /stock/bulk-update returns 500 (whole call fails, not per-item)
+  refundFails: false,         // POST /refunds returns 500
+  shipmentFails: false,       // POST /shipments returns 500
 };
 
 function freshState() {
@@ -20,6 +22,7 @@ function freshState() {
     returns: [],
     shipmentsByIntentId: new Map(),
     returnDecisionsByIntentId: new Map(),
+    refundsByIntentId: new Map(),
     callLog: [], // { intentId, kind, result } — backs GET /call-status
     // What this channel currently believes it can sell, keyed by sku. Written by
     // /stock/bulk-update (so a test can assert the LAST pushed value actually landed)

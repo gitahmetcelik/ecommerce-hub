@@ -76,6 +76,21 @@ hub:
     circuit-failure-threshold: 5
     circuit-open-seconds: 60
 
+  auth:
+    # Dev/test-only default — production MUST override. Anyone holding this can mint a
+    # token for any user in any organization.
+    jwt-secret: ${HUB_JWT_SECRET:dev-only-hub-jwt-secret-change-me-in-production-0123456789}
+    access-token-ttl: PT15M
+    refresh-token-ttl: P14D
+    invitation-ttl: P7D
+    password-reset-ttl: PT2H
+
+  returns:
+    # plan §0: 24h reminder, 48h timeout + escalation. The timeout never auto-rejects.
+    reminder-after: PT24H
+    timeout-after: PT48H
+    sweep-period-ms: 60000
+
   retention:
     motor-task-retention-days-default: 30
     raw-event-retention-days: 90

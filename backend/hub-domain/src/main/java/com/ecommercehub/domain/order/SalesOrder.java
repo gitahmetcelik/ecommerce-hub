@@ -108,6 +108,11 @@ public class SalesOrder {
         return channelEventSequence;
     }
 
+    /** plan §3's money rule: the amount is meaningless without this alongside it. */
+    public String getCurrency() {
+        return currency;
+    }
+
     public String getDerivedStatus() {
         return derivedStatus;
     }

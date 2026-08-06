@@ -14,6 +14,12 @@ router.post('/shipments', (req, res) => {
     return res.status(400).json({ error: 'intentId is required' });
   }
 
+  // Whole-call failure, for the plan Faz 5 gate that drives the shipment step into
+  // the DLQ and the operator queue.
+  if (state.scenarios.shipmentFails) {
+    return res.status(500).json({ error: 'simulated shipment failure' });
+  }
+
   const existing = state.shipmentsByIntentId.get(intentId);
   if (existing) {
     state.callLog.push({ intentId, kind: 'SHIPMENT', result: existing });

@@ -18,6 +18,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>3.5.16</spring-boot.version>
         <task-engine.version>0.1.0</task-engine.version>
+        <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
     <modules>
