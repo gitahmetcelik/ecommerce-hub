@@ -72,11 +72,24 @@ public class ReturnService {
     @Transactional
     public ReturnRequest recordChannelReturn(UUID organizationId, UUID salesOrderId, String channelReturnId,
                                               String reason, List<RequestedItem> items) {
+        return recordChannelReturnIfNew(organizationId, salesOrderId, channelReturnId, reason, items).request();
+    }
+
+    /**
+     * @return the return, and whether this call is what created it. The flag matters to
+     *         the reconcile pass: its overlap window re-presents returns it has already
+     *         seen, and counting those as new would report work that never happened.
+     */
+    @Transactional
+    public RecordedReturn recordChannelReturnIfNew(UUID organizationId, UUID salesOrderId, String channelReturnId,
+                                                    String reason, List<RequestedItem> items) {
         tenantContextService.setTransactionTenantContext(organizationId);
 
         return returnRequestRepository
                 .findByOrganizationIdAndSalesOrderIdAndChannelReturnId(organizationId, salesOrderId, channelReturnId)
-                .orElseGet(() -> openReturn(organizationId, salesOrderId, channelReturnId, reason, items));
+                .map(existing -> new RecordedReturn(existing, false))
+                .orElseGet(() -> new RecordedReturn(
+                        openReturn(organizationId, salesOrderId, channelReturnId, reason, items), true));
     }
 
     private ReturnRequest openReturn(UUID organizationId, UUID salesOrderId, String channelReturnId,
@@ -315,6 +328,10 @@ public class ReturnService {
     }
 
     public record RequestedItem(UUID orderItemId, int quantity) {
+    }
+
+    /** @param created false when this return was already known — a redelivery or an overlap re-read. */
+    public record RecordedReturn(ReturnRequest request, boolean created) {
     }
 
     /** How many of the returned units came back sellable, and how many did not. */

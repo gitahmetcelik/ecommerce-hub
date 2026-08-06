@@ -3,6 +3,8 @@ package com.ecommercehub.app.reconcile;
 import com.ecommercehub.connector.ChannelConnectionRef;
 import com.ecommercehub.connector.ChannelOrder;
 import com.ecommercehub.connector.ChannelProduct;
+import com.ecommercehub.connector.ChannelReturn;
+import com.ecommercehub.connector.ChannelReturnItem;
 import com.ecommercehub.connector.Page;
 import com.ecommercehub.connector.PagedResult;
 import com.ecommercehub.connector.PlatformConnector;
@@ -15,6 +17,7 @@ import com.ecommercehub.domain.channel.ChannelConnectionRepository;
 import com.ecommercehub.domain.order.OrderEventPayload;
 import com.ecommercehub.domain.order.OrderItemStatus;
 import com.ecommercehub.domain.order.OrderProcessingService;
+import com.ecommercehub.domain.returns.ReturnService;
 import com.ecommercehub.domain.security.CredentialEncryptionService;
 import com.ecommercehub.domain.stock.ChannelAvailability;
 import com.ecommercehub.domain.stock.StockAvailabilityService;
@@ -64,6 +67,7 @@ public class ReconcileService {
     private final StockAvailabilityService stockAvailabilityService;
     private final StockDiscrepancyRecorder discrepancyRecorder;
     private final OrderProcessingService orderProcessingService;
+    private final ReturnService returnService;
     private final TenantContextService tenantContextService;
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -75,6 +79,7 @@ public class ReconcileService {
                              StockAvailabilityService stockAvailabilityService,
                              StockDiscrepancyRecorder discrepancyRecorder,
                              OrderProcessingService orderProcessingService,
+                             ReturnService returnService,
                              TenantContextService tenantContextService,
                              NamedParameterJdbcTemplate jdbcTemplate) {
         this.channelConnectionRepository = channelConnectionRepository;
@@ -85,6 +90,7 @@ public class ReconcileService {
         this.stockAvailabilityService = stockAvailabilityService;
         this.discrepancyRecorder = discrepancyRecorder;
         this.orderProcessingService = orderProcessingService;
+        this.returnService = returnService;
         this.tenantContextService = tenantContextService;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -209,6 +215,158 @@ public class ReconcileService {
         markSynced(channelConnectionId, startedAt);
         circuitBreaker.recordSuccess(channelConnectionId);
         return observed;
+    }
+
+    /**
+     * plan §11 row 2: the hourly return delta pass.
+     *
+     * <p>This is how a return actually enters the hub. Without it the return flow exists
+     * but nothing ever starts it — plan §7's machine would only ever run for returns
+     * somebody typed in by hand.
+     *
+     * <p>Idempotent by way of {@code channel_return_id}: the overlap window (and any
+     * redelivery) re-presents returns we already know about, and each one resolves to
+     * the existing row rather than opening a second approval for the same parcel.
+     *
+     * @return how many returns were newly opened
+     */
+    @Transactional
+    public int reconcileReturns(UUID organizationId, UUID channelConnectionId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        if (!circuitBreaker.isCallable(channelConnectionId)) {
+            return 0;
+        }
+
+        ChannelConnection connection = requireConnection(channelConnectionId);
+        PlatformConnector connector = connectorRegistry.require(connection.getChannelType());
+        ChannelConnectionRef ref = toRef(organizationId, connection);
+        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+
+        Instant since = lastReturnSyncAt(channelConnectionId)
+                .map(last -> last.minus(SINCE_OVERLAP))
+                .orElse(Instant.EPOCH);
+
+        int opened = 0;
+        int pageNumber = 1;
+        boolean hasMore = true;
+        Instant startedAt = Instant.now();
+
+        while (hasMore) {
+            if (!budget.tryAcquire(BudgetClass.OPERATIONAL)) {
+                log.info("Return reconcile for connection {} paused — OPERATIONAL budget exhausted", channelConnectionId);
+                // Cursor untouched, so the next run re-covers this window rather than skipping it.
+                return opened;
+            }
+
+            PagedResult<ChannelReturn> page = connector.fetchReturns(ref, since, new Page(pageNumber, PAGE_SIZE));
+            for (ChannelReturn channelReturn : page.items()) {
+                opened += openIfResolvable(organizationId, channelConnectionId, channelReturn) ? 1 : 0;
+            }
+            hasMore = page.hasMore();
+            pageNumber++;
+        }
+
+        markReturnsSynced(channelConnectionId, startedAt);
+        circuitBreaker.recordSuccess(channelConnectionId);
+        return opened;
+    }
+
+    /**
+     * Turns one channel return into a hub return, or escalates it.
+     *
+     * <p>A return we cannot attach to an order and its items is <b>not</b> dropped. That
+     * is the same rule Faz 3 applies to unmatched catalogue items (plan §3: eşleşmemiş
+     * kalem sessizce düşürülmez) and it matters more here — a silently discarded return
+     * is a customer waiting for a refund that no one in the system knows is owed.
+     */
+    private boolean openIfResolvable(UUID organizationId, UUID channelConnectionId, ChannelReturn channelReturn) {
+        Optional<SalesOrderRef> order = findOrder(organizationId, channelConnectionId, channelReturn.channelOrderId());
+        if (order.isEmpty()) {
+            escalateUnresolvableReturn(organizationId, channelReturn,
+                    "no sales_order matches channel order " + channelReturn.channelOrderId());
+            return false;
+        }
+
+        List<ReturnService.RequestedItem> items = new java.util.ArrayList<>();
+        for (ChannelReturnItem line : channelReturn.items()) {
+            Optional<UUID> orderItemId = findOrderItem(organizationId, order.get().id(), line.sku());
+            if (orderItemId.isEmpty()) {
+                escalateUnresolvableReturn(organizationId, channelReturn,
+                        "order " + channelReturn.channelOrderId() + " has no line for sku " + line.sku());
+                return false;
+            }
+            items.add(new ReturnService.RequestedItem(orderItemId.get(), line.quantity()));
+        }
+
+        if (items.isEmpty()) {
+            escalateUnresolvableReturn(organizationId, channelReturn,
+                    "the channel reported no line items, so what came back is unknown");
+            return false;
+        }
+
+        return returnService.recordChannelReturnIfNew(organizationId, order.get().id(),
+                channelReturn.channelReturnId(), channelReturn.status(), items).created();
+    }
+
+    private void escalateUnresolvableReturn(UUID organizationId, ChannelReturn channelReturn, String reason) {
+        jdbcTemplate.update("""
+                INSERT INTO hub.operator_queue (id, organization_id, type, description, reference_id)
+                SELECT gen_random_uuid(), :org, 'RETURN_UNRESOLVABLE', :description, NULL
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM hub.operator_queue
+                    WHERE organization_id = :org AND type = 'RETURN_UNRESOLVABLE'
+                      AND description = :description AND status = 'PENDING'
+                )
+                """, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("description", "Channel return " + channelReturn.channelReturnId()
+                        + " could not be attached to an order: " + reason));
+
+        log.warn("Channel return {} could not be resolved ({}) — escalated rather than dropped",
+                channelReturn.channelReturnId(), reason);
+    }
+
+    private Optional<SalesOrderRef> findOrder(UUID organizationId, UUID channelConnectionId, String channelOrderNumber) {
+        List<UUID> ids = jdbcTemplate.queryForList("""
+                SELECT id FROM hub.sales_order
+                WHERE organization_id = :org AND channel_connection_id = :conn AND channel_order_number = :number
+                """, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("conn", channelConnectionId)
+                .addValue("number", channelOrderNumber), UUID.class);
+        return ids.isEmpty() ? Optional.empty() : Optional.of(new SalesOrderRef(ids.get(0)));
+    }
+
+    private Optional<UUID> findOrderItem(UUID organizationId, UUID salesOrderId, String sku) {
+        List<UUID> ids = jdbcTemplate.queryForList("""
+                SELECT oi.id FROM hub.order_item oi
+                JOIN hub.variant v ON v.id = oi.variant_id
+                WHERE oi.organization_id = :org AND oi.sales_order_id = :order AND v.sku = :sku
+                """, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("order", salesOrderId)
+                .addValue("sku", sku), UUID.class);
+        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
+    }
+
+    private Optional<Instant> lastReturnSyncAt(UUID channelConnectionId) {
+        Timestamp last = jdbcTemplate.queryForObject(
+                "SELECT last_return_sync_at FROM hub.channel_connection WHERE id = :id",
+                new MapSqlParameterSource("id", channelConnectionId), Timestamp.class);
+        return Optional.ofNullable(last).map(Timestamp::toInstant);
+    }
+
+    private void markReturnsSynced(UUID channelConnectionId, Instant startedAt) {
+        jdbcTemplate.update("""
+                UPDATE hub.channel_connection
+                SET last_return_sync_at = :at, updated_at = now(), version = version + 1
+                WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", channelConnectionId)
+                .addValue("at", Timestamp.from(startedAt)));
+    }
+
+    private record SalesOrderRef(UUID id) {
     }
 
     private Optional<UUID> findMappedVariant(UUID organizationId, UUID channelConnectionId, String channelVariantId) {

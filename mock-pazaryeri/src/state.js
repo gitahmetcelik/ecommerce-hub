@@ -61,11 +61,15 @@ function seed() {
   // Non-ASCII title on purpose (plan §8 contract test: character encoding round-trip).
   state.catalog.push({ id: 'product-tr', sku: 'SKU-TR', barcode: 'BARCODE-TR', title: 'Türkçe Ürün İçeriği 😀' });
   for (let i = 0; i < 5; i++) {
+    // Line items mirror the order they came from: a return without lines cannot say
+    // WHAT came back, and "all of it" is the wrong default for a partial return.
+    const source = state.orders.find((o) => o.id === `order-${i}`);
     state.returns.push({
       id: `return-${i}`,
       orderId: `order-${i}`,
       createdAt: new Date(now - i * 60000).toISOString(),
       status: 'REQUESTED',
+      items: source ? source.items.map((it) => ({ sku: it.sku, quantity: it.quantity })) : [],
     });
   }
 }

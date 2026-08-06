@@ -68,6 +68,9 @@ hub:
   reconcile:
     sweep-period-ms: 30000
     intent-sweep-period-ms: 60000
+    # plan §11 row 2 — hourly. Returns are not time-critical the way stock is, and each
+    # pass costs a channel call per connection.
+    return-sweep-period-ms: 3600000
     # plan §11's nightly pass. Runs after the retention job (02:30) so it never
     # reports a discrepancy against rows that job is in the middle of removing.
     nightly-cron: "0 0 3 * * *"

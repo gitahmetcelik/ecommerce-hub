@@ -108,6 +108,26 @@ public class ReconcileScheduler {
         }
     }
 
+    /**
+     * plan §11 row 2: the hourly pass. Returns enter the hub here — the flow in plan §7
+     * has no other way to start, so without this the whole return machine only ever runs
+     * for returns a person typed in by hand.
+     */
+    @Scheduled(fixedDelayString = "${hub.reconcile.return-sweep-period-ms:3600000}")
+    @SchedulerLock(name = "reconcile-returns", lockAtLeastFor = "PT10S", lockAtMostFor = "PT30M")
+    public void sweepReturns() {
+        if (!schedulingEnabled) {
+            return;
+        }
+        for (Map<String, Object> row : activeConnections()) {
+            try {
+                reconcileService.reconcileReturns((UUID) row.get("organization_id"), (UUID) row.get("id"));
+            } catch (RuntimeException e) {
+                log.warn("Return reconcile failed for connection {}", row.get("id"), e);
+            }
+        }
+    }
+
     /** plan §11 rows 3-4: the nightly passes — channel drift, then the local ledger replay. */
     @Scheduled(cron = "${hub.reconcile.nightly-cron:0 0 3 * * *}")
     @SchedulerLock(name = "reconcile-nightly", lockAtLeastFor = "PT1M", lockAtMostFor = "PT6H")
@@ -116,11 +136,7 @@ public class ReconcileScheduler {
             return;
         }
 
-        List<Map<String, Object>> connections = systemJdbcTemplate.queryForList("""
-                SELECT id, organization_id FROM hub.channel_connection WHERE status = 'ACTIVE'
-                """, Map.of());
-
-        for (Map<String, Object> row : connections) {
+        for (Map<String, Object> row : activeConnections()) {
             try {
                 reconcileService.reconcileChannelStock((UUID) row.get("organization_id"), (UUID) row.get("id"));
             } catch (RuntimeException e) {
@@ -203,6 +219,12 @@ public class ReconcileScheduler {
                 """, new MapSqlParameterSource()
                 .addValue("id", connectionId)
                 .addValue("minutes", intervalMinutes));
+    }
+
+    private List<Map<String, Object>> activeConnections() {
+        return systemJdbcTemplate.queryForList("""
+                SELECT id, organization_id FROM hub.channel_connection WHERE status = 'ACTIVE'
+                """, Map.of());
     }
 
     private List<UUID> allOrganizationIds() {

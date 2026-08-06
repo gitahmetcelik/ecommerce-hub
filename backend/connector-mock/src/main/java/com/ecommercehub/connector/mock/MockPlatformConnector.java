@@ -9,6 +9,7 @@ import com.ecommercehub.connector.ChannelOrderItem;
 import com.ecommercehub.connector.ChannelProduct;
 import com.ecommercehub.connector.ChannelRateLimitedException;
 import com.ecommercehub.connector.ChannelReturn;
+import com.ecommercehub.connector.ChannelReturnItem;
 import com.ecommercehub.connector.CredentialStatus;
 import com.ecommercehub.connector.ItemResult;
 import com.ecommercehub.connector.Page;
@@ -169,8 +170,15 @@ public class MockPlatformConnector implements PlatformConnector {
 
         List<ChannelReturn> returns = new ArrayList<>();
         for (JsonNode r : json.get("items")) {
+            List<ChannelReturnItem> items = new ArrayList<>();
+            JsonNode lines = r.get("items");
+            if (lines != null) {
+                for (JsonNode line : lines) {
+                    items.add(new ChannelReturnItem(line.get("sku").asText(), line.get("quantity").asInt()));
+                }
+            }
             returns.add(new ChannelReturn(r.get("id").asText(), r.get("orderId").asText(),
-                    Instant.parse(r.get("createdAt").asText()), r.get("status").asText()));
+                    Instant.parse(r.get("createdAt").asText()), r.get("status").asText(), items));
         }
         return toPagedResult(json, returns);
     }
