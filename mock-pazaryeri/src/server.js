@@ -14,6 +14,7 @@ app.use(require('./routes/shipments'));
 app.use(require('./routes/refunds'));
 app.use(require('./routes/callStatus'));
 app.use(require('./routes/auth'));
+app.use(require('./routes/storylines'));
 app.use(require('./routes/admin'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
