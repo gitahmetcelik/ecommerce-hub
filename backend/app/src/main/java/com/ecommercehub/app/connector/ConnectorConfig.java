@@ -2,6 +2,7 @@ package com.ecommercehub.app.connector;
 
 import com.ecommercehub.connector.Capability;
 import com.ecommercehub.connector.PlatformConnector;
+import com.ecommercehub.connector.mock.MockBarcodeMarketplaceConnector;
 import com.ecommercehub.connector.mock.MockPlatformConnector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
@@ -35,5 +36,15 @@ public class ConnectorConfig {
                 Capability.WEBHOOK, Capability.REQUEST_IDEMPOTENCY_KEY);
 
         return new MockPlatformConnector(HttpClient.newHttpClient(), objectMapper, "MOCK_REFUND", capabilities);
+    }
+
+    /**
+     * A genuinely different channel shape: barcode-keyed, no webhooks, no client
+     * idempotency key. Registered so the hub runs against more than one shape at once —
+     * a capability matrix only exercised by a single profile is a matrix in name only.
+     */
+    @Bean
+    public PlatformConnector mockBarcodeMarketplaceConnector(ObjectMapper objectMapper) {
+        return new MockBarcodeMarketplaceConnector(HttpClient.newHttpClient(), objectMapper);
     }
 }

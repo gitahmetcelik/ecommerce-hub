@@ -60,17 +60,75 @@ public class CatalogMatchingService {
             return existing.get().getVariantId();
         }
 
-        Variant variant = variantRepository.findByOrganizationIdAndSku(organizationId, sku)
-                .orElseGet(() -> {
-                    Product product = productRepository.save(new Product(UUID.randomUUID(), organizationId, title));
-                    Variant created = new Variant(UUID.randomUUID(), organizationId, product.getId(), sku);
-                    created.setBarcode(barcode);
-                    return variantRepository.save(created);
-                });
+        Match match = findForImport(organizationId, sku, barcode);
+        Variant variant = match.variant() != null
+                ? match.variant()
+                : createVariant(organizationId, sku, barcode, title);
 
         recordMapping(organizationId, channelConnectionId, channelProductId, channelVariantId,
-                variant.getId(), ChannelProductMapping.MappingSource.AUTO_SKU);
+                variant.getId(), match.source());
         return variant.getId();
+    }
+
+    /**
+     * SKU first, then barcode — the same order {@link #resolve} uses.
+     *
+     * <p>The barcode fallback was missing here originally and only started to matter once
+     * a channel with no seller SKU existed: without it, importing the same physical
+     * product from two channels produced two variants for it, and each would then carry
+     * its own idea of that product's stock.
+     */
+    private Match findForImport(UUID organizationId, String sku, String barcode) {
+        if (sku != null && !sku.isBlank()) {
+            Optional<Variant> bySku = variantRepository.findByOrganizationIdAndSku(organizationId, sku);
+            if (bySku.isPresent()) {
+                return new Match(bySku.get(), ChannelProductMapping.MappingSource.AUTO_SKU);
+            }
+        }
+
+        if (barcode != null && !barcode.isBlank()) {
+            List<Variant> byBarcode = variantRepository.findByOrganizationIdAndBarcode(organizationId, barcode);
+            // Exactly one, or none. An ambiguous barcode stays a human's decision even on
+            // the import path, where guessing would attach a channel's entire catalogue to
+            // the wrong variants in one pass.
+            if (byBarcode.size() == 1) {
+                return new Match(byBarcode.get(0), ChannelProductMapping.MappingSource.AUTO_BARCODE);
+            }
+        }
+
+        return new Match(null, sku != null && !sku.isBlank()
+                ? ChannelProductMapping.MappingSource.AUTO_SKU
+                : ChannelProductMapping.MappingSource.AUTO_BARCODE);
+    }
+
+    /**
+     * Creates the variant a channel's catalogue implies.
+     *
+     * <p>When the channel supplies no SKU, one is minted from the barcode. Plan §3 makes
+     * the SKU <em>our</em> key rather than the channel's, so a channel that does not have
+     * one is not an error to reject — it is a channel we have to name things for. Leaving
+     * it null is not an option either: the column is NOT NULL precisely because every
+     * variant must be referable by an identifier we control.
+     */
+    private Variant createVariant(UUID organizationId, String sku, String barcode, String title) {
+        String effectiveSku = sku != null && !sku.isBlank() ? sku : mintSkuFromBarcode(barcode);
+
+        Product product = productRepository.save(new Product(UUID.randomUUID(), organizationId, title));
+        Variant created = new Variant(UUID.randomUUID(), organizationId, product.getId(), effectiveSku);
+        created.setBarcode(barcode);
+        return variantRepository.save(created);
+    }
+
+    /** Deterministic, so re-importing the same catalogue converges instead of multiplying variants. */
+    private String mintSkuFromBarcode(String barcode) {
+        if (barcode == null || barcode.isBlank()) {
+            throw new IllegalArgumentException("A channel item with neither a sku nor a barcode cannot be "
+                    + "imported — there is nothing to identify it by");
+        }
+        return "BC-" + barcode;
+    }
+
+    private record Match(Variant variant, ChannelProductMapping.MappingSource source) {
     }
 
     public record MatchResult(boolean matched, UUID variantId) {
