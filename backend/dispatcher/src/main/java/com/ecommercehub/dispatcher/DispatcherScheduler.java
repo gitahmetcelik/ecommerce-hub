@@ -1,6 +1,7 @@
 package com.ecommercehub.dispatcher;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -21,22 +22,29 @@ public class DispatcherScheduler {
 
     private final WorkBatchDispatcher dispatcher;
     private final OrphanSweeperService orphanSweeper;
+    private final boolean enabled;
 
-    public DispatcherScheduler(WorkBatchDispatcher dispatcher, OrphanSweeperService orphanSweeper) {
+    public DispatcherScheduler(WorkBatchDispatcher dispatcher, OrphanSweeperService orphanSweeper,
+                                @Value("${hub.scheduling.enabled:true}") boolean enabled) {
         this.dispatcher = dispatcher;
         this.orphanSweeper = orphanSweeper;
+        this.enabled = enabled;
     }
 
     @Scheduled(fixedDelayString = "${hub.dispatcher.cycle-period-ms:1000}")
     @SchedulerLock(name = "work-batch-dispatch-cycle", lockAtLeastFor = "PT0.5S", lockAtMostFor = "PT30S")
     public void runDispatchCycle() {
-        dispatcher.dispatchCycle();
+        if (enabled) {
+            dispatcher.dispatchCycle();
+        }
     }
 
     @Scheduled(fixedDelayString = "${hub.dispatcher.sweep-period-ms:5000}")
     @SchedulerLock(name = "work-batch-orphan-sweep", lockAtLeastFor = "PT0.5S", lockAtMostFor = "PT30S")
     public void runOrphanSweep() {
-        orphanSweeper.closeCompletedRows();
-        orphanSweeper.escalateStuckRows();
+        if (enabled) {
+            orphanSweeper.closeCompletedRows();
+            orphanSweeper.escalateStuckRows();
+        }
     }
 }

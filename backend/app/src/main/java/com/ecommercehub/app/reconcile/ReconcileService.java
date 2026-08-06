@@ -1,0 +1,270 @@
+package com.ecommercehub.app.reconcile;
+
+import com.ecommercehub.connector.ChannelConnectionRef;
+import com.ecommercehub.connector.ChannelOrder;
+import com.ecommercehub.connector.ChannelProduct;
+import com.ecommercehub.connector.Page;
+import com.ecommercehub.connector.PagedResult;
+import com.ecommercehub.connector.PlatformConnector;
+import com.ecommercehub.connector.ratelimit.BudgetClass;
+import com.ecommercehub.connector.ratelimit.RateLimitBudget;
+import com.ecommercehub.app.backfill.ChannelBudgetRegistry;
+import com.ecommercehub.domain.channel.ChannelCircuitBreakerService;
+import com.ecommercehub.domain.channel.ChannelConnection;
+import com.ecommercehub.domain.channel.ChannelConnectionRepository;
+import com.ecommercehub.domain.order.OrderEventPayload;
+import com.ecommercehub.domain.order.OrderItemStatus;
+import com.ecommercehub.domain.order.OrderProcessingService;
+import com.ecommercehub.domain.security.CredentialEncryptionService;
+import com.ecommercehub.domain.stock.ChannelAvailability;
+import com.ecommercehub.domain.stock.StockAvailabilityService;
+import com.ecommercehub.domain.stock.StockDiscrepancyRecorder;
+import com.ecommercehub.domain.stock.StockDiscrepancyType;
+import com.ecommercehub.domain.tenant.TenantContextService;
+import com.ecommercehub.ingest.ConnectorRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * plan §11's reconcile layers, minus the scheduling (see {@link ReconcileScheduler}).
+ *
+ * <p>Two rules run through everything here. <b>Nothing is auto-corrected</b> — the
+ * nightly stock pass writes stock_discrepancy rows and stops, per plan §0. And
+ * <b>reconcile is not an event</b>: it re-asserts a target state rather than applying
+ * a delta, which is only safe because plan §6's transitions are target-status
+ * idempotent. Without that property, a reconcile followed by a deferred webhook for
+ * the same transition would decrement stock twice.
+ */
+@Service
+public class ReconcileService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReconcileService.class);
+
+    /** plan §8: delta fetches always overlap the previous window by this much. */
+    private static final Duration SINCE_OVERLAP = Duration.ofMinutes(5);
+    private static final int PAGE_SIZE = 100;
+
+    private final ChannelConnectionRepository channelConnectionRepository;
+    private final CredentialEncryptionService credentialEncryptionService;
+    private final ConnectorRegistry connectorRegistry;
+    private final ChannelBudgetRegistry budgetRegistry;
+    private final ChannelCircuitBreakerService circuitBreaker;
+    private final StockAvailabilityService stockAvailabilityService;
+    private final StockDiscrepancyRecorder discrepancyRecorder;
+    private final OrderProcessingService orderProcessingService;
+    private final TenantContextService tenantContextService;
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+
+    public ReconcileService(ChannelConnectionRepository channelConnectionRepository,
+                             CredentialEncryptionService credentialEncryptionService,
+                             ConnectorRegistry connectorRegistry,
+                             ChannelBudgetRegistry budgetRegistry,
+                             ChannelCircuitBreakerService circuitBreaker,
+                             StockAvailabilityService stockAvailabilityService,
+                             StockDiscrepancyRecorder discrepancyRecorder,
+                             OrderProcessingService orderProcessingService,
+                             TenantContextService tenantContextService,
+                             NamedParameterJdbcTemplate jdbcTemplate) {
+        this.channelConnectionRepository = channelConnectionRepository;
+        this.credentialEncryptionService = credentialEncryptionService;
+        this.connectorRegistry = connectorRegistry;
+        this.budgetRegistry = budgetRegistry;
+        this.circuitBreaker = circuitBreaker;
+        this.stockAvailabilityService = stockAvailabilityService;
+        this.discrepancyRecorder = discrepancyRecorder;
+        this.orderProcessingService = orderProcessingService;
+        this.tenantContextService = tenantContextService;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * Nightly full stock pass (plan §11, BACKGROUND class): walks the channel's whole
+     * catalog and reports every quantity that disagrees with ours.
+     *
+     * @return how many drifting variants were reported
+     */
+    @Transactional
+    public int reconcileChannelStock(UUID organizationId, UUID channelConnectionId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        if (!circuitBreaker.isCallable(channelConnectionId)) {
+            return 0;
+        }
+
+        ChannelConnection connection = requireConnection(channelConnectionId);
+        PlatformConnector connector = connectorRegistry.require(connection.getChannelType());
+        ChannelConnectionRef ref = toRef(organizationId, connection);
+        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+
+        int reported = 0;
+        int pageNumber = 1; // mock-pazaryeri (and every real channel so far) pages from 1
+        boolean hasMore = true;
+
+        while (hasMore) {
+            if (!budget.tryAcquire(BudgetClass.BACKGROUND)) {
+                log.info("Nightly stock reconcile for connection {} paused at page {} — BACKGROUND budget exhausted",
+                        channelConnectionId, pageNumber);
+                break;
+            }
+
+            PagedResult<ChannelProduct> page = connector.fetchCatalog(ref, new Page(pageNumber, PAGE_SIZE));
+            for (ChannelProduct product : page.items()) {
+                reported += compareOne(organizationId, channelConnectionId, product);
+            }
+            hasMore = page.hasMore();
+            pageNumber++;
+        }
+
+        circuitBreaker.recordSuccess(channelConnectionId);
+        if (reported > 0) {
+            log.warn("Nightly reconcile reported {} drifting variant(s) on connection {} — reported, not corrected",
+                    reported, channelConnectionId);
+        }
+        return reported;
+    }
+
+    private int compareOne(UUID organizationId, UUID channelConnectionId, ChannelProduct product) {
+        if (product.availableQuantity() == null) {
+            return 0; // Channel does not report stock — nothing to compare against.
+        }
+
+        Optional<UUID> variantId = findMappedVariant(organizationId, channelConnectionId, product.channelVariantId());
+        if (variantId.isEmpty()) {
+            // Unmatched channel items are Faz 3's mapping_candidate problem, not a stock
+            // drift — reporting them here would flood the drift report with catalog noise.
+            return 0;
+        }
+
+        int expected = stockAvailabilityService.computeFor(organizationId, variantId.get()).stream()
+                .filter(a -> a.channelConnectionId().equals(channelConnectionId))
+                .mapToInt(ChannelAvailability::quantity)
+                .findFirst()
+                .orElse(0);
+
+        if (expected == product.availableQuantity()) {
+            return 0;
+        }
+
+        discrepancyRecorder.record(organizationId, channelConnectionId, variantId.get(),
+                StockDiscrepancyType.CHANNEL_DRIFT, expected, product.availableQuantity());
+        return 1;
+    }
+
+    /**
+     * Delta order reconcile (plan §11, OPERATIONAL class): the safety net for webhooks
+     * that never arrived. Feeds the very same OrderProcessingService the webhook path
+     * uses, so a re-observed order takes the identical code path and the identical
+     * idempotency guarantees.
+     *
+     * @return how many orders were re-observed
+     */
+    @Transactional
+    public int reconcileOpenOrders(UUID organizationId, UUID channelConnectionId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        if (!circuitBreaker.isCallable(channelConnectionId)) {
+            return 0;
+        }
+
+        ChannelConnection connection = requireConnection(channelConnectionId);
+        PlatformConnector connector = connectorRegistry.require(connection.getChannelType());
+        ChannelConnectionRef ref = toRef(organizationId, connection);
+        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+
+        Instant since = lastOrderSyncAt(channelConnectionId)
+                .map(last -> last.minus(SINCE_OVERLAP))
+                .orElse(Instant.EPOCH);
+
+        int observed = 0;
+        int pageNumber = 1; // mock-pazaryeri (and every real channel so far) pages from 1
+        boolean hasMore = true;
+        Instant startedAt = Instant.now();
+
+        while (hasMore) {
+            if (!budget.tryAcquire(BudgetClass.OPERATIONAL)) {
+                log.info("Delta reconcile for connection {} paused — OPERATIONAL budget exhausted", channelConnectionId);
+                // Leaves last_order_sync_at untouched, so the next run re-covers this window.
+                return observed;
+            }
+
+            PagedResult<ChannelOrder> page = connector.fetchOrders(ref, since, new Page(pageNumber, PAGE_SIZE));
+            for (ChannelOrder order : page.items()) {
+                orderProcessingService.process(toPayload(organizationId, channelConnectionId, order));
+                observed++;
+            }
+            hasMore = page.hasMore();
+            pageNumber++;
+        }
+
+        markSynced(channelConnectionId, startedAt);
+        circuitBreaker.recordSuccess(channelConnectionId);
+        return observed;
+    }
+
+    private Optional<UUID> findMappedVariant(UUID organizationId, UUID channelConnectionId, String channelVariantId) {
+        List<UUID> ids = jdbcTemplate.queryForList("""
+                SELECT variant_id FROM hub.channel_product_mapping
+                WHERE organization_id = :org AND channel_connection_id = :conn AND channel_variant_id = :cvid
+                """, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("conn", channelConnectionId)
+                .addValue("cvid", channelVariantId), UUID.class);
+        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
+    }
+
+    private Optional<Instant> lastOrderSyncAt(UUID channelConnectionId) {
+        Timestamp last = jdbcTemplate.queryForObject(
+                "SELECT last_order_sync_at FROM hub.channel_connection WHERE id = :id",
+                new MapSqlParameterSource("id", channelConnectionId), Timestamp.class);
+        return Optional.ofNullable(last).map(Timestamp::toInstant);
+    }
+
+    /**
+     * Stamped with the time the fetch <em>started</em>, never the time it finished — an
+     * order created while a long page walk was in progress must fall inside the next
+     * window, not into the gap between the two.
+     */
+    private void markSynced(UUID channelConnectionId, Instant startedAt) {
+        jdbcTemplate.update("""
+                UPDATE hub.channel_connection
+                SET last_order_sync_at = :at, updated_at = now(), version = version + 1
+                WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", channelConnectionId)
+                .addValue("at", Timestamp.from(startedAt)));
+    }
+
+    private OrderEventPayload toPayload(UUID organizationId, UUID channelConnectionId, ChannelOrder order) {
+        List<OrderEventPayload.OrderEventItem> items = order.items().stream()
+                .map(item -> new OrderEventPayload.OrderEventItem(item.sku(), item.sku(), item.sku(), null,
+                        item.quantity(), item.unitPrice(), BigDecimal.ZERO, OrderItemStatus.CREATED))
+                .toList();
+
+        BigDecimal total = order.items().stream()
+                .map(i -> i.unitPrice().multiply(BigDecimal.valueOf(i.quantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return new OrderEventPayload(organizationId, channelConnectionId, "reconcile:" + order.channelOrderId(),
+                order.channelOrderId(), order.eventAt(), order.channelEventSequence(), total, "USD", items, null);
+    }
+
+    private ChannelConnection requireConnection(UUID channelConnectionId) {
+        return channelConnectionRepository.findById(channelConnectionId)
+                .orElseThrow(() -> new IllegalArgumentException("No channel_connection " + channelConnectionId));
+    }
+
+    private ChannelConnectionRef toRef(UUID organizationId, ChannelConnection connection) {
+        return new ChannelConnectionRef(connection.getId(), organizationId, connection.getChannelType(),
+                credentialEncryptionService.decrypt(connection.getEncryptedCredentials(), connection.getKeyVersion()));
+    }
+}

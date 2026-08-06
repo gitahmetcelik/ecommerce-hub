@@ -65,11 +65,29 @@ public class OrderProcessingGateTests extends AbstractTestcontainersTest {
         }
     }
 
+    /**
+     * Seeded with stock on hand, not just as a catalogue entry. Since Faz 4 the ledger
+     * refuses to reserve or ship units that do not exist — it records an oversell_event
+     * and holds the counters at zero instead of letting them go negative. A variant with
+     * no stock therefore makes every order here an oversell, which is a different
+     * scenario from the reservation and state-machine behaviour these Faz 2 gates are
+     * about. Supplying stock first is what "an already-catalogued item" actually looks
+     * like in production.
+     */
     private void seedVariant(String sku) {
         UUID productId = UUID.randomUUID();
+        UUID variantId = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO hub.product (id, organization_id, title) VALUES (?, ?, ?)", productId, orgId, sku);
         jdbcTemplate.update("INSERT INTO hub.variant (id, organization_id, product_id, sku) VALUES (?, ?, ?, ?)",
-                UUID.randomUUID(), orgId, productId, sku);
+                variantId, orgId, productId, sku);
+
+        jdbcTemplate.update("""
+                INSERT INTO hub.stock (id, organization_id, variant_id, on_hand) VALUES (gen_random_uuid(), ?, ?, 100)
+                """, orgId, variantId);
+        jdbcTemplate.update("""
+                INSERT INTO hub.stock_movement (id, organization_id, variant_id, quantity, reason)
+                VALUES (gen_random_uuid(), ?, ?, 100, 'ON_HAND_INCREASE')
+                """, orgId, variantId);
     }
 
     private OrderEventPayload.OrderEventItem item(String sku, OrderItemStatus target) {

@@ -9,7 +9,14 @@ router.get('/catalog', (req, res) => {
   const pageSize = parseInt(req.query.pageSize || '10', 10);
 
   const start = (page - 1) * pageSize;
-  const pageItems = state.catalog.slice(start, start + pageSize);
+  // Stock is folded into the catalog feed the way a real marketplace does it — the
+  // nightly reconcile (plan §11) walks this feed instead of making a second call per
+  // sku. null (not 0) when the channel has never been told a quantity, so the reconcile
+  // can tell "no opinion" apart from "genuinely zero" and skip the former.
+  const pageItems = state.catalog.slice(start, start + pageSize).map((item) => ({
+    ...item,
+    stock: Object.prototype.hasOwnProperty.call(state.stockBySku, item.sku) ? state.stockBySku[item.sku] : null,
+  }));
   const totalPages = Math.max(1, Math.ceil(state.catalog.length / pageSize));
 
   res.json({

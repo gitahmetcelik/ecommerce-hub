@@ -108,8 +108,14 @@ public class MockPlatformConnector implements PlatformConnector {
 
         List<ChannelProduct> products = new ArrayList<>();
         for (JsonNode p : json.get("items")) {
+            // A missing or null "stock" stays null rather than becoming 0 — the nightly
+            // reconcile reads null as "the channel has no opinion" and skips it, while 0
+            // would be taken as a real quantity and reported as drift on every variant.
+            JsonNode stock = p.get("stock");
+            Integer availableQuantity = stock == null || stock.isNull() ? null : stock.asInt();
+
             products.add(new ChannelProduct(p.get("id").asText(), p.get("id").asText(),
-                    p.get("sku").asText(), p.get("barcode").asText(), p.get("title").asText()));
+                    p.get("sku").asText(), p.get("barcode").asText(), p.get("title").asText(), availableQuantity));
         }
         return toPagedResult(json, products);
     }

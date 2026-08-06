@@ -9,6 +9,7 @@ const DEFAULT_SCENARIOS = {
   duplicateOrders: false,     // repeats the first order in the feed
   outOfOrderOrders: false,    // shuffles order sequence instead of chronological
   credentialsInvalid: false,  // GET /auth/status returns 401
+  stockUpdateFails: false,    // POST /stock/bulk-update returns 500 (whole call fails, not per-item)
 };
 
 function freshState() {
@@ -20,6 +21,16 @@ function freshState() {
     shipmentsByIntentId: new Map(),
     returnDecisionsByIntentId: new Map(),
     callLog: [], // { intentId, kind, result } — backs GET /call-status
+    // What this channel currently believes it can sell, keyed by sku. Written by
+    // /stock/bulk-update (so a test can assert the LAST pushed value actually landed)
+    // and by /_admin/stock (so a test can inject the drift the nightly reconcile is
+    // meant to notice). A sku absent from here means the channel reports no stock for it.
+    stockBySku: {},
+    // Per-path request counter. Coalescing is only meaningful if the number of CALLS
+    // can be shown to have dropped — 50 separate calls each carrying the correct value
+    // would sail through a final-value-only assertion while being exactly the failure
+    // the coalescing table exists to prevent.
+    callCountsByPath: {},
   };
 }
 

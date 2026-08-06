@@ -12,6 +12,10 @@ function scenarioMiddleware(req, res, next) {
   const state = store.get();
   const scenarios = state.scenarios;
   state.requestCountTotal = (state.requestCountTotal || 0) + 1;
+  // Counted here rather than inside each route so it also includes calls that end in a
+  // 429 or a simulated timeout — those consumed channel quota too, and a coalescing
+  // assertion that ignored them would understate the real call volume.
+  state.callCountsByPath[req.path] = (state.callCountsByPath[req.path] || 0) + 1;
 
   if (scenarios.timeoutPaths.includes(req.path)) {
     setTimeout(() => {

@@ -68,6 +68,10 @@ public class Stock {
         return id;
     }
 
+    public UUID getOrganizationId() {
+        return organizationId;
+    }
+
     public UUID getVariantId() {
         return variantId;
     }

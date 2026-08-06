@@ -2,6 +2,7 @@ package com.ecommercehub.app.backfill;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -20,16 +21,22 @@ class BackfillScheduler {
 
     private final NamedParameterJdbcTemplate systemJdbcTemplate;
     private final BackfillService backfillService;
+    private final boolean schedulingEnabled;
 
     BackfillScheduler(@Qualifier("systemJdbcTemplate") NamedParameterJdbcTemplate systemJdbcTemplate,
-                       BackfillService backfillService) {
+                       BackfillService backfillService,
+                       @Value("${hub.scheduling.enabled:true}") boolean schedulingEnabled) {
         this.systemJdbcTemplate = systemJdbcTemplate;
         this.backfillService = backfillService;
+        this.schedulingEnabled = schedulingEnabled;
     }
 
     @Scheduled(fixedDelayString = "${hub.backfill.cycle-period-ms:5000}")
     @SchedulerLock(name = "backfill-cycle", lockAtLeastFor = "PT1S", lockAtMostFor = "PT2M")
     void runPendingBackfills() {
+        if (!schedulingEnabled) {
+            return;
+        }
         List<Map<String, Object>> pending = systemJdbcTemplate.queryForList("""
                 SELECT id, organization_id FROM hub.channel_connection
                 WHERE backfill_status IS NULL OR backfill_status->>'ordersDone' != 'true'

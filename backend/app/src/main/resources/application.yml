@@ -58,6 +58,24 @@ hub:
     cycle-period-ms: 1000
     sweep-period-ms: 5000
 
+  push:
+    # plan §3: the coalescing window. Every pending row for a connection goes out in
+    # one batch call per window, so this is the upper bound on push latency, not a
+    # throughput knob — plan §5 allows < 60s at peak, so 5s has plenty of headroom.
+    window-ms: 5000
+    window-batch-limit: 1000
+
+  reconcile:
+    sweep-period-ms: 30000
+    intent-sweep-period-ms: 60000
+    # plan §11's nightly pass. Runs after the retention job (02:30) so it never
+    # reports a discrepancy against rows that job is in the middle of removing.
+    nightly-cron: "0 0 3 * * *"
+
+  channel:
+    circuit-failure-threshold: 5
+    circuit-open-seconds: 60
+
   retention:
     motor-task-retention-days-default: 30
     raw-event-retention-days: 90

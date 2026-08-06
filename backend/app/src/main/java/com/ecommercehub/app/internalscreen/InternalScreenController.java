@@ -129,6 +129,56 @@ public class InternalScreenController {
         return Map.of("resolved", true);
     }
 
+    /**
+     * plan Faz 4: the push queue. A row sitting at PENDING with a high generation means
+     * a channel is being told a number repeatedly and never confirming it — the shape a
+     * broken push takes, and invisible from anywhere else.
+     */
+    @GetMapping("/internal/channel-pushes")
+    @Transactional
+    public List<Map<String, Object>> channelPushes(@RequestParam UUID organizationId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        return jdbcTemplate.queryForList("""
+                SELECT id, channel_connection_id, variant_id, type, target_value, generation, status,
+                       last_attempt_at, updated_at
+                FROM hub.channel_push ORDER BY updated_at DESC LIMIT 200
+                """);
+    }
+
+    /** plan §11: what reconcile found and deliberately did not fix. */
+    @GetMapping("/internal/stock-discrepancies")
+    @Transactional
+    public List<Map<String, Object>> stockDiscrepancies(@RequestParam UUID organizationId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        return jdbcTemplate.queryForList("""
+                SELECT id, channel_connection_id, variant_id, type, expected, actual, resolved, updated_at
+                FROM hub.stock_discrepancy WHERE resolved = false ORDER BY updated_at DESC LIMIT 200
+                """);
+    }
+
+    /** plan §3: sales we could not back with stock. */
+    @GetMapping("/internal/oversells")
+    @Transactional
+    public List<Map<String, Object>> oversells(@RequestParam UUID organizationId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        return jdbcTemplate.queryForList("""
+                SELECT id, channel_connection_id, variant_id, requested, available, created_at
+                FROM hub.oversell_event ORDER BY created_at DESC LIMIT 200
+                """);
+    }
+
+    /** plan Faz 4: connection health — circuit state and why it was last tripped. */
+    @GetMapping("/internal/channel-connections")
+    @Transactional
+    public List<Map<String, Object>> channelConnections(@RequestParam UUID organizationId) {
+        tenantContextService.setTransactionTenantContext(organizationId);
+        return jdbcTemplate.queryForList("""
+                SELECT id, channel_type, status, consecutive_failures, circuit_open_until, last_failure_reason,
+                       reconcile_interval_minutes, next_reconcile_at, last_order_sync_at, allocation_priority
+                FROM hub.channel_connection ORDER BY created_at
+                """);
+    }
+
     /** motor.olu_mektup_kutusu has no organization_id (plan §1.1) — this is a system-wide view, not org-scoped. */
     @GetMapping("/internal/dlq")
     public List<Map<String, Object>> deadLetterQueue() {

@@ -1,5 +1,9 @@
 package com.ecommercehub.domain.stock;
 
+import com.ecommercehub.domain.push.ChannelPushService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,55 +15,146 @@ import java.util.UUID;
  * stock_movement row — nothing here changes a counter without one). Locks the stock
  * row with SELECT FOR UPDATE so concurrent adjustments to the same variant serialize
  * instead of losing an update.
+ *
+ * <p><b>Faz 4 adds two things to every adjustment.</b> First, counters are clamped so
+ * reserved can never exceed on_hand and nothing can go negative — a reservation that
+ * does not fit is an oversell, recorded in oversell_event rather than absorbed by
+ * letting the counter go negative (plan Faz 4 gate: "merkez stok negatife düşmez,
+ * oversell kaydedilir"). Second, the resulting availability is queued for every
+ * channel that sells the variant, in this same transaction.
+ *
+ * <p>The ledger always records the quantity <em>actually applied</em>, never the
+ * requested one. That is what keeps the nightly recompute (plan §11) able to derive
+ * the stock row from its movements — if a clamped request wrote its full magnitude,
+ * the consistency check would report a permanent phantom discrepancy on every oversell.
  */
 @Service
 public class StockLedgerService {
 
+    private static final Logger log = LoggerFactory.getLogger(StockLedgerService.class);
+
     private final StockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final ChannelPushService channelPushService;
+    private final JdbcTemplate jdbcTemplate;
 
-    public StockLedgerService(StockRepository stockRepository, StockMovementRepository stockMovementRepository) {
+    public StockLedgerService(StockRepository stockRepository, StockMovementRepository stockMovementRepository,
+                               ChannelPushService channelPushService, JdbcTemplate jdbcTemplate) {
         this.stockRepository = stockRepository;
         this.stockMovementRepository = stockMovementRepository;
+        this.channelPushService = channelPushService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * @param channelConnectionId the channel the demand came from, so an oversell can
+     *                            be attributed to it. Null only for reservations with no
+     *                            channel origin (internal adjustments), which are still
+     *                            clamped but recorded as a warning instead of a row.
+     * @return the quantity actually reserved, which is less than requested on an oversell
+     */
     @Transactional
-    public void recordReservedIncrease(UUID organizationId, UUID variantId, int quantity, UUID referenceId) {
-        adjust(organizationId, variantId, quantity, StockMovementReason.RESERVED_INCREASE, referenceId, Stock::adjustReserved);
+    public int recordReservedIncrease(UUID organizationId, UUID variantId, int quantity, UUID referenceId,
+                                       UUID channelConnectionId) {
+        Stock stock = lockOrCreate(organizationId, variantId);
+
+        int headroom = Math.max(0, stock.getOnHand() - stock.getReserved());
+        int applied = Math.min(quantity, headroom);
+
+        if (applied < quantity) {
+            recordOversell(organizationId, channelConnectionId, variantId, quantity, headroom);
+        }
+
+        apply(stock, applied, StockMovementReason.RESERVED_INCREASE, referenceId, Stock::adjustReserved);
+        return applied;
     }
 
     @Transactional
     public void recordReservedDecrease(UUID organizationId, UUID variantId, int quantity, UUID referenceId) {
-        adjust(organizationId, variantId, -quantity, StockMovementReason.RESERVED_DECREASE, referenceId, Stock::adjustReserved);
+        Stock stock = lockOrCreate(organizationId, variantId);
+        int applied = Math.min(quantity, stock.getReserved());
+        apply(stock, -applied, StockMovementReason.RESERVED_DECREASE, referenceId, Stock::adjustReserved);
     }
 
     @Transactional
     public void recordOnHandIncrease(UUID organizationId, UUID variantId, int quantity, UUID referenceId) {
-        adjust(organizationId, variantId, quantity, StockMovementReason.ON_HAND_INCREASE, referenceId, Stock::adjustOnHand);
+        Stock stock = lockOrCreate(organizationId, variantId);
+        apply(stock, quantity, StockMovementReason.ON_HAND_INCREASE, referenceId, Stock::adjustOnHand);
     }
 
     @Transactional
     public void recordOnHandDecrease(UUID organizationId, UUID variantId, int quantity, UUID referenceId) {
-        adjust(organizationId, variantId, -quantity, StockMovementReason.ON_HAND_DECREASE, referenceId, Stock::adjustOnHand);
+        Stock stock = lockOrCreate(organizationId, variantId);
+        int applied = Math.min(quantity, stock.getOnHand());
+
+        if (applied < quantity) {
+            // Shipping units we never recorded as on hand. The oversell itself was already
+            // recorded when the reservation was clamped; letting on_hand go negative here
+            // would only invent inventory that never existed, so it is clamped and said
+            // out loud instead of disappearing into the counter.
+            log.warn("Shipment of {} unit(s) of variant {} exceeded on_hand ({}) — clamped, ledger records {}",
+                    quantity, variantId, stock.getOnHand(), applied);
+        }
+
+        apply(stock, -applied, StockMovementReason.ON_HAND_DECREASE, referenceId, Stock::adjustOnHand);
     }
 
     @Transactional
     public void recordDamagedIncrease(UUID organizationId, UUID variantId, int quantity, UUID referenceId) {
-        adjust(organizationId, variantId, quantity, StockMovementReason.DAMAGED_INCREASE, referenceId, Stock::adjustDamaged);
+        Stock stock = lockOrCreate(organizationId, variantId);
+        apply(stock, quantity, StockMovementReason.DAMAGED_INCREASE, referenceId, Stock::adjustDamaged);
     }
 
-    private void adjust(UUID organizationId, UUID variantId, int signedDelta, StockMovementReason reason,
-                         UUID referenceId, CounterAdjuster adjuster) {
-        Stock stock = stockRepository.findByOrganizationIdAndVariantIdForUpdate(organizationId, variantId)
-                .orElseGet(() -> stockRepository.save(new Stock(UUID.randomUUID(), organizationId, variantId)));
+    /**
+     * Receiving new goods. Separate from {@link #recordOnHandIncrease} only in intent —
+     * both write the same reason, because the ledger's job is to explain the counter,
+     * not to catalogue every business motive behind it.
+     */
+    @Transactional
+    public void recordSupply(UUID organizationId, UUID variantId, int quantity, UUID referenceId) {
+        recordOnHandIncrease(organizationId, variantId, quantity, referenceId);
+    }
 
+    private Stock lockOrCreate(UUID organizationId, UUID variantId) {
+        return stockRepository.findByOrganizationIdAndVariantIdForUpdate(organizationId, variantId)
+                .orElseGet(() -> stockRepository.saveAndFlush(new Stock(UUID.randomUUID(), organizationId, variantId)));
+    }
+
+    private void apply(Stock stock, int signedDelta, StockMovementReason reason, UUID referenceId,
+                        CounterAdjuster adjuster) {
         adjuster.apply(stock, signedDelta);
 
-        // The ledger always records the magnitude actually applied, with the reason
-        // saying which direction/counter — not a raw signed delta that would force
-        // every reader to also know the reason to interpret the sign.
-        stockMovementRepository.save(new StockMovement(
-                UUID.randomUUID(), organizationId, variantId, Math.abs(signedDelta), reason, referenceId));
+        if (signedDelta != 0) {
+            // The ledger always records the magnitude actually applied, with the reason
+            // saying which direction/counter — not a raw signed delta that would force
+            // every reader to also know the reason to interpret the sign.
+            stockMovementRepository.save(new StockMovement(
+                    UUID.randomUUID(), stock.getOrganizationId(), stock.getVariantId(),
+                    Math.abs(signedDelta), reason, referenceId));
+        }
+
+        // Queued even when the delta was clamped to zero: an oversell means the channel
+        // is advertising stock we do not have, so it needs the corrected number more
+        // urgently than usual, not less. ChannelPushStore.upsert drops it if the value
+        // genuinely did not move.
+        channelPushService.enqueueStockPush(stock.getOrganizationId(), stock.getVariantId(),
+                stock.getOnHand(), stock.getReserved());
+    }
+
+    private void recordOversell(UUID organizationId, UUID channelConnectionId, UUID variantId,
+                                 int requested, int available) {
+        if (channelConnectionId == null) {
+            log.warn("Reservation of {} for variant {} clamped to {} with no channel to attribute it to",
+                    requested, variantId, available);
+            return;
+        }
+        jdbcTemplate.update("""
+                INSERT INTO hub.oversell_event
+                    (id, organization_id, channel_connection_id, variant_id, requested, available)
+                VALUES (gen_random_uuid(), ?, ?, ?, ?, ?)
+                """, organizationId, channelConnectionId, variantId, requested, available);
+        log.warn("Oversell on variant {} via channel {}: requested {}, only {} available",
+                variantId, channelConnectionId, requested, available);
     }
 
     @FunctionalInterface

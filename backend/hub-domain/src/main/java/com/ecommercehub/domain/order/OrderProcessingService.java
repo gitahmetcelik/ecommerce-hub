@@ -129,9 +129,14 @@ public class OrderProcessingService {
                 UUID.randomUUID(), order.getOrganizationId(), order.getId(), variantId,
                 incoming.quantity(), incoming.unitPrice(), incoming.vatRate() == null ? java.math.BigDecimal.ZERO : incoming.vatRate()));
 
-        stockLedgerService.recordReservedIncrease(order.getOrganizationId(), variantId, incoming.quantity(), item.getId());
+        // The reservation row records what was actually held, not what was ordered — on
+        // an oversell those differ, and releasing a hold that was never placed (expiry,
+        // cancellation) would drive reserved below the real number of held units.
+        int reserved = stockLedgerService.recordReservedIncrease(
+                order.getOrganizationId(), variantId, incoming.quantity(), item.getId(), order.getChannelConnectionId());
+
         stockReservationRepository.save(new StockReservation(
-                UUID.randomUUID(), order.getOrganizationId(), item.getId(), variantId, incoming.quantity(),
+                UUID.randomUUID(), order.getOrganizationId(), item.getId(), variantId, reserved,
                 Instant.now().plus(RESERVATION_HOLD_HOURS, ChronoUnit.HOURS)));
 
         return item;
@@ -159,11 +164,11 @@ public class OrderProcessingService {
             case PAID -> reservation.ifPresent(StockReservation::clearExpiry);
             case SHIPPED -> {
                 stockLedgerService.recordOnHandDecrease(order.getOrganizationId(), item.getVariantId(), item.getQuantity(), item.getId());
-                stockLedgerService.recordReservedDecrease(order.getOrganizationId(), item.getVariantId(), item.getQuantity(), item.getId());
+                stockLedgerService.recordReservedDecrease(order.getOrganizationId(), item.getVariantId(), heldQuantity(reservation, item), item.getId());
                 reservation.ifPresent(stockReservationRepository::delete);
             }
             case CANCELLED, PAYMENT_TIMEOUT -> {
-                stockLedgerService.recordReservedDecrease(order.getOrganizationId(), item.getVariantId(), item.getQuantity(), item.getId());
+                stockLedgerService.recordReservedDecrease(order.getOrganizationId(), item.getVariantId(), heldQuantity(reservation, item), item.getId());
                 reservation.ifPresent(stockReservationRepository::delete);
             }
             case IN_RETURN -> {
@@ -173,6 +178,15 @@ public class OrderProcessingService {
                 // AWAITING_PAYMENT, PREPARING, DELIVERED, CREATED: no stock counter change.
             }
         }
+    }
+
+    /**
+     * How many units are actually held for this item. Equals the ordered quantity in the
+     * normal case and less than it when the reservation was clamped by an oversell — the
+     * reservation row is the authority on what was held, the order item on what was sold.
+     */
+    private int heldQuantity(Optional<StockReservation> reservation, OrderItem item) {
+        return reservation.map(StockReservation::getQuantity).orElse(item.getQuantity());
     }
 
     private void escalateToOperatorQueue(SalesOrder order, OrderItem item, OrderItemTransitionDecision.Decision decision) {
