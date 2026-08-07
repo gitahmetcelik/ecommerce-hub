@@ -72,6 +72,15 @@ export type ChannelConnection = {
   allocation_priority: number;
 };
 
+export type CandidateVariant = {
+  variantId: string;
+  sku: string;
+  barcode: string | null;
+  title: string | null;
+  /** Order items on this variant not yet DELIVERED/CANCELLED/PAYMENT_TIMEOUT — what's riding on picking right. */
+  openOrderItems: number;
+};
+
 export type MappingCandidate = {
   id: string;
   channel_connection_id: string;
@@ -79,9 +88,10 @@ export type MappingCandidate = {
   channel_variant_id: string;
   barcode: string | null;
   title: string | null;
-  candidate_variant_ids: string | null;
   status: string;
   created_at: string;
+  /** Null/empty when nothing matched at all; 2+ when a barcode was ambiguous — never exactly 1 (that auto-resolves before reaching here). */
+  candidates: CandidateVariant[] | null;
 };
 
 export type OperatorQueueItem = {

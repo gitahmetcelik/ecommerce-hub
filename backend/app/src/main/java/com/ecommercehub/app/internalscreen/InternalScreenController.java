@@ -138,16 +138,12 @@ public class InternalScreenController {
                 """);
     }
 
-    /** Plan Phase 3: the operator matching screen — every PENDING mapping_candidate awaiting a human decision. */
+    /** Plan Phase 3: the operator matching screen — see CatalogMatchingService.pendingCandidatesWithDetails. */
     @GetMapping("/internal/mapping-candidates")
     @Transactional
     public List<Map<String, Object>> mappingCandidates() {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
-                SELECT id, channel_connection_id, channel_product_id, channel_variant_id, barcode, title,
-                       candidate_variant_ids, status, created_at
-                FROM hub.mapping_candidate WHERE status = 'PENDING' ORDER BY created_at LIMIT 200
-                """);
+        return catalogMatchingService.pendingCandidatesWithDetails();
     }
 
     public record ResolveMappingRequest(UUID variantId, UUID userId) {
@@ -160,6 +156,19 @@ public class InternalScreenController {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
         catalogMatchingService.resolveManually(candidateId, request.variantId(), request.userId());
         return Map.of("resolved", true);
+    }
+
+    public record IgnoreMappingRequest(UUID userId) {
+    }
+
+    /** Plan §3 eslesme_adayi.durum = YOKSAYILDI: this channel item is not going to be matched (discontinued, test listing, ...). */
+    @PostMapping("/internal/mapping-candidates/{candidateId}/ignore")
+    @Transactional
+    public Map<String, Object> ignoreMappingCandidate(@PathVariable UUID candidateId,
+                                                        @RequestBody IgnoreMappingRequest request) {
+        tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
+        catalogMatchingService.ignore(candidateId, request.userId());
+        return Map.of("ignored", true);
     }
 
     /**

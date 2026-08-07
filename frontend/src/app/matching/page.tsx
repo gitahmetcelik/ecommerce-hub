@@ -1,78 +1,139 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { DataTable, PageHeader, type Column } from "@/components/data-table";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/data-table";
+import { EmptyState } from "@/components/hub/empty-state";
+import { UndoStrip, useUndoable } from "@/components/hub/undo-strip";
 import { RequireSession } from "@/components/require-session";
 import { api } from "@/lib/api";
 import type { Session } from "@/lib/auth";
-import type { MappingCandidate } from "@/lib/types";
-
-const POLL_MS = 5000;
+import { cn } from "@/lib/utils";
+import type { CandidateVariant, MappingCandidate } from "@/lib/types";
 
 export default function MatchingPage() {
   return <RequireSession>{(session) => <Matching session={session} />}</RequireSession>;
 }
 
+function channelLabel(item: MappingCandidate): string {
+  return item.title ?? item.channel_variant_id;
+}
+
 /**
- * Plan Phase 3: channel items that could not be matched are queued here rather than
- * dropped. An unmatched line cannot have its stock deducted, so a silently discarded
- * one is an order that quietly never affected inventory.
+ * ui-plani.md §4.2: the highest-volume manual work in the app — a 5,000-variant catalog
+ * produces hundreds of these during backfill (Phase 3), so this is built around never
+ * touching the mouse. Every candidate list here is a real judgment call: the matching
+ * service auto-resolves anything with exactly one clean match before a mapping_candidate
+ * row is ever written (see CatalogMatchingService.pendingCandidatesWithDetails), so
+ * there's no safe "approve all" subset to bulk-act on — every row here genuinely needs a
+ * human, which is why this screen optimizes for going through them fast one at a time
+ * rather than for approving many at once.
  */
 function Matching({ session }: { session: Session }) {
   const queryClient = useQueryClient();
-  const [variantIds, setVariantIds] = useState<Record<string, string>>({});
-
   const candidates = useQuery({
     queryKey: ["mapping-candidates"],
     queryFn: api.matching.candidates,
-    refetchInterval: POLL_MS,
+    refetchInterval: 5000,
   });
 
-  const resolve = useMutation({
-    mutationFn: ({ candidateId, variantId }: { candidateId: string; variantId: string }) =>
-      api.matching.resolve(candidateId, variantId, session.userId),
-    onSuccess: () => {
-      toast.success("Mapping resolved");
-      queryClient.invalidateQueries({ queryKey: ["mapping-candidates"] });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
+  const { pending, remainingMs, enqueue, undo } = useUndoable();
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [manualVariantId, setManualVariantId] = useState("");
 
-  const columns: Column<MappingCandidate>[] = [
-    { key: "title", header: "Channel item", render: (row) => row.title ?? row.channel_variant_id },
-    { key: "barcode", header: "Barcode", render: (row) => row.barcode ?? "—" },
-    {
-      key: "candidates",
-      header: "Suggested",
-      render: (row) => <code className="text-xs">{row.candidate_variant_ids ?? "—"}</code>,
-    },
-    {
-      key: "resolve",
-      header: "Resolve to variant",
-      render: (row) => (
-        <div className="flex gap-2">
-          <input
-            data-testid={`variant-input-${row.id}`}
-            value={variantIds[row.id] ?? ""}
-            onChange={(e) => setVariantIds((current) => ({ ...current, [row.id]: e.target.value }))}
-            placeholder="variant id"
-            className="w-64 rounded border bg-background px-2 py-1 text-xs"
-          />
-          <button
-            type="button"
-            data-testid={`resolve-${row.id}`}
-            disabled={!variantIds[row.id] || resolve.isPending}
-            onClick={() => resolve.mutate({ candidateId: row.id, variantId: variantIds[row.id] })}
-            className="rounded border px-2 py-1 text-xs disabled:opacity-40"
-          >
-            Resolve
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const visible = useMemo(
+    () => (candidates.data ?? []).filter((c) => c.id !== pending?.id),
+    [candidates.data, pending],
+  );
+  const current = visible[Math.min(currentIndex, Math.max(0, visible.length - 1))];
+  const currentCandidates = current?.candidates ?? [];
+
+  // React-recommended "adjust state during render" pattern (not an effect): the
+  // selection and manual-id field must reset the instant the current item changes,
+  // whether that's from an explicit "next" or from the list shifting under an undo.
+  const [trackedId, setTrackedId] = useState<string | undefined>(current?.id);
+  if (current?.id !== trackedId) {
+    setTrackedId(current?.id);
+    setSelectedIdx(0);
+    setManualVariantId("");
+  }
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["mapping-candidates"] });
+  }
+
+  function resolveTo(item: MappingCandidate, candidate: CandidateVariant) {
+    enqueue({
+      id: item.id,
+      label: `Matched "${channelLabel(item)}" → ${candidate.sku}`,
+      commit: async () => {
+        try {
+          await api.matching.resolve(item.id, candidate.variantId, session.userId);
+        } catch (error) {
+          toast.error((error as Error).message);
+        } finally {
+          refresh();
+        }
+      },
+    });
+  }
+
+  function ignoreItem(item: MappingCandidate) {
+    enqueue({
+      id: item.id,
+      label: `Ignored "${channelLabel(item)}"`,
+      commit: async () => {
+        try {
+          await api.matching.ignore(item.id, session.userId);
+        } catch (error) {
+          toast.error((error as Error).message);
+        } finally {
+          refresh();
+        }
+      },
+    });
+  }
+
+  function goNext() {
+    setCurrentIndex((i) => Math.min(i + 1, visible.length - 1));
+  }
+
+  // Keyboard-first (ui-plani.md §4.2): up/down move the selection, Enter commits it, Y
+  // ignores the item outright, → just moves on without deciding. Disabled while typing in
+  // the manual-id fallback so an operator can still type digits and letters normally.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (!current) return;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSelectedIdx((i) => Math.min(i + 1, currentCandidates.length - 1));
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSelectedIdx((i) => Math.max(i - 1, 0));
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const candidate = currentCandidates[selectedIdx];
+        if (candidate) resolveTo(current, candidate);
+      } else if (event.key === "y" || event.key === "Y") {
+        event.preventDefault();
+        ignoreItem(current);
+      } else if (event.key === "ArrowRight" || event.key === "n") {
+        event.preventDefault();
+        goNext();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, currentCandidates, selectedIdx]);
 
   return (
     <>
@@ -80,13 +141,115 @@ function Matching({ session }: { session: Session }) {
         title="Matching"
         description="Channel items the hub could not attach to a variant. Nothing here was dropped — that is the point."
       />
-      <DataTable
-        rows={candidates.data}
-        columns={columns}
-        empty="Everything the channels sent matched a variant."
-        testId="candidates-table"
-        rowKey={(row) => row.id}
-      />
+
+      <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground">
+        <span data-testid="matching-count">{visible.length} waiting</span>
+        <span className="hidden sm:inline">↑↓ select · Enter match · Y ignore · → next</span>
+      </div>
+
+      {visible.length === 0 ? (
+        candidates.isLoading ? (
+          <p className="py-8 text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <EmptyState
+            variant="success"
+            title="Everything the channels sent matched a variant."
+            testId="matching-empty"
+          />
+        )
+      ) : (
+        current && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardContent className="space-y-1">
+                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">From the channel</p>
+                <p className="text-base font-medium" data-testid="matching-current-title">{channelLabel(current)}</p>
+                <p className="text-sm text-muted-foreground">Barcode: {current.barcode ?? "—"}</p>
+                <p className="text-sm text-muted-foreground">Channel variant: {current.channel_variant_id}</p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {currentCandidates.length > 0
+                  ? `${currentCandidates.length} variants share barcode ${current.barcode}`
+                  : "No SKU or barcode match found"}
+              </p>
+
+              {currentCandidates.map((candidate, i) => (
+                <Card
+                  key={candidate.variantId}
+                  data-testid={`candidate-${candidate.variantId}`}
+                  className={cn(
+                    "cursor-pointer transition-colors",
+                    i === selectedIdx && "ring-2 ring-primary",
+                  )}
+                  onClick={() => setSelectedIdx(i)}
+                  onDoubleClick={() => resolveTo(current, candidate)}
+                >
+                  <CardContent className="flex items-center justify-between py-3">
+                    <div>
+                      <p className="text-sm font-medium">{candidate.sku}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {candidate.title ?? "Untitled"} · barcode {candidate.barcode ?? "—"}
+                      </p>
+                      {candidate.openOrderItems > 0 && (
+                        <p className="text-xs text-durum-uyari">
+                          Used in {candidate.openOrderItems} open order item{candidate.openOrderItems === 1 ? "" : "s"}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resolveTo(current, candidate);
+                      }}
+                      data-testid={`resolve-${candidate.variantId}`}
+                    >
+                      Match
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+
+              <div className="flex gap-2 pt-2">
+                <Input
+                  placeholder="Or enter a variant ID directly"
+                  value={manualVariantId}
+                  onChange={(e) => setManualVariantId(e.target.value)}
+                  data-testid="matching-manual-id"
+                  className="text-xs"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!manualVariantId}
+                  onClick={() =>
+                    resolveTo(current, { variantId: manualVariantId, sku: manualVariantId, barcode: null, title: null, openOrderItems: 0 })
+                  }
+                  data-testid="matching-manual-resolve"
+                >
+                  Match
+                </Button>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button type="button" size="sm" variant="outline" onClick={() => ignoreItem(current)} data-testid="matching-ignore">
+                  Ignore (Y)
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={goNext} data-testid="matching-next">
+                  Skip for now (→)
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      )}
+
+      <UndoStrip pending={pending} remainingMs={remainingMs} onUndo={undo} />
     </>
   );
 }

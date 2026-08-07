@@ -186,4 +186,64 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
                 .withFailMessage("A resolved candidate must close its own operator_queue row — otherwise the queue never empties")
                 .isEqualTo("RESOLVED");
     }
+
+    @Test
+    @DisplayName("arayuz-3: pendingCandidatesWithDetails resolves candidate_variant_ids to real variant rows and open-order impact")
+    void pendingCandidatesWithDetailsResolvesRealVariants() {
+        UUID busyVariant = seedVariant("SKU-BUSY", "SHARED-DETAIL");
+        UUID quietVariant = seedVariant("SKU-QUIET", "SHARED-DETAIL");
+
+        OrderEventPayload event = new OrderEventPayload(orgId, channelConnectionId, UUID.randomUUID().toString(),
+                "CO-" + UUID.randomUUID(), Instant.now(), 1L, new BigDecimal("19.99"), "USD",
+                List.of(new OrderEventPayload.OrderEventItem("SKU-BUSY", "cp-busy", "cv-busy", null,
+                        1, new BigDecimal("19.99"), BigDecimal.ZERO, OrderItemStatus.CREATED)),
+                UUID.randomUUID().toString());
+        orderProcessingService.process(event);
+
+        catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-detail-test", "NO-MATCH", "SHARED-DETAIL", "title");
+
+        List<Map<String, Object>> rows = catalogMatchingService.pendingCandidatesWithDetails();
+        Map<String, Object> row = rows.stream()
+                .filter(r -> "cv-detail-test".equals(r.get("channel_variant_id")))
+                .findFirst()
+                .orElseThrow();
+
+        String candidatesJson = row.get("candidates").toString().replace(" ", "");
+        assertThat(candidatesJson).contains("SKU-BUSY").contains("SKU-QUIET");
+        assertThat(candidatesJson)
+                .withFailMessage("The variant with one open order item must report openOrderItems=1, not 0")
+                .contains("\"openOrderItems\":1");
+
+        assertThat(busyVariant).isNotEqualTo(quietVariant);
+    }
+
+    @Test
+    @DisplayName("arayuz-3: ignoring a candidate marks it IGNORED, audits it, and closes its queue row without creating a mapping")
+    void ignoringCandidateClosesWithoutMapping() {
+        UUID userId = UUID.randomUUID();
+
+        catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-ignore-test", "NO-MATCH", null, "title");
+        UUID candidateId = jdbcTemplate.queryForObject(
+                "SELECT id FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-ignore-test'", UUID.class);
+
+        catalogMatchingService.ignore(candidateId, userId);
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.mapping_candidate WHERE id = ?", String.class, candidateId);
+        assertThat(status).isEqualTo("IGNORED");
+
+        Integer mappingCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.channel_product_mapping WHERE channel_variant_id = 'cv-ignore-test'", Integer.class);
+        assertThat(mappingCount).isZero();
+
+        Integer auditCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.audit_log WHERE organization_id = ? AND action = 'CATALOG_MAPPING_IGNORED'",
+                Integer.class, orgId);
+        assertThat(auditCount).isEqualTo(1);
+
+        String queueStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.operator_queue WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM' AND reference_id = ?",
+                String.class, orgId, candidateId);
+        assertThat(queueStatus).isEqualTo("RESOLVED");
+    }
 }

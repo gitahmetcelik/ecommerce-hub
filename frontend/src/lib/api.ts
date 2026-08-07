@@ -135,6 +135,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ variantId, userId }),
       }),
+    ignore: (candidateId: string, userId: string) =>
+      request<{ ignored: boolean }>(`/internal/mapping-candidates/${candidateId}/ignore`, {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      }),
   },
 
   operator: {

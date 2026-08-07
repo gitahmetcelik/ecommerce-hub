@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,6 +44,37 @@ public class CatalogMatchingService {
         this.candidateRepository = candidateRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * The operator matching screen's data. `candidates` resolves candidate_variant_ids to
+     * real variant rows (sku/barcode/title) plus how many open order items already depend
+     * on each one — a candidate list can only exist here at all when it has zero entries
+     * (nothing matched) or two-plus (an ambiguous barcode); {@link #resolve} auto-resolves
+     * anything with exactly one clean match before a mapping_candidate row is ever written,
+     * so "which one is right" is always a real judgment call by the time it reaches this
+     * screen, never a formality.
+     */
+    public List<Map<String, Object>> pendingCandidatesWithDetails() {
+        return jdbcTemplate.queryForList("""
+                SELECT mc.id, mc.channel_connection_id, mc.channel_product_id, mc.channel_variant_id,
+                       mc.barcode, mc.title, mc.status, mc.created_at,
+                       (
+                           SELECT jsonb_agg(jsonb_build_object(
+                               'variantId', v.id, 'sku', v.sku, 'barcode', v.barcode, 'title', p.title,
+                               'openOrderItems', (
+                                   SELECT count(*) FROM hub.order_item oi
+                                   WHERE oi.variant_id = v.id
+                                     AND oi.status NOT IN ('DELIVERED', 'CANCELLED', 'PAYMENT_TIMEOUT')
+                               )
+                           ))
+                           FROM jsonb_array_elements_text(COALESCE(mc.candidate_variant_ids, '[]'::jsonb)) AS cand(variant_id)
+                           JOIN hub.variant v ON v.id = cand.variant_id::uuid
+                           JOIN hub.product p ON p.id = v.product_id
+                       ) AS candidates
+                FROM hub.mapping_candidate mc
+                WHERE mc.status = 'PENDING' ORDER BY mc.created_at LIMIT 200
+                """);
     }
 
     /**
@@ -196,15 +228,43 @@ public class CatalogMatchingService {
                 """,
                 candidate.getOrganizationId(), userId, candidateId, variantId, candidate.getChannelVariantId());
 
-        // queueForReview's operator_queue row (type UNMATCHED_CATALOG_ITEM, reference_id =
-        // candidateId) has no other closing path — without this, a resolved candidate stays
-        // PENDING in the queue forever, which is exactly the stale-notification failure the
-        // queue redesign (ui-plani.md §4.1) is supposed to make impossible.
+        closeReviewQueueItem(candidate.getOrganizationId(), candidateId);
+    }
+
+    /**
+     * Plan §3 eslesme_adayi.durum = YOKSAYILDI — the operator has decided this channel
+     * item is not going to be matched at all (a discontinued line, a test listing). Unlike
+     * {@link #resolveManually}, this creates no mapping — a future sync of the same
+     * channel_variant_id will queue a fresh candidate rather than silently staying ignored
+     * forever, since ignoring today says nothing about whether it should stay ignored.
+     */
+    @Transactional
+    public void ignore(UUID candidateId, UUID userId) {
+        MappingCandidate candidate = candidateRepository.findById(candidateId)
+                .orElseThrow(() -> new IllegalArgumentException("No mapping_candidate with id " + candidateId));
+
+        candidate.markIgnored();
+
+        jdbcTemplate.update("""
+                INSERT INTO hub.audit_log (id, organization_id, user_id, action, details)
+                VALUES (gen_random_uuid(), ?, ?, 'CATALOG_MAPPING_IGNORED', jsonb_build_object(
+                    'mappingCandidateId', ?::text, 'channelVariantId', ?))
+                """,
+                candidate.getOrganizationId(), userId, candidateId, candidate.getChannelVariantId());
+
+        closeReviewQueueItem(candidate.getOrganizationId(), candidateId);
+    }
+
+    // queueForReview's operator_queue row (type UNMATCHED_CATALOG_ITEM, reference_id =
+    // candidateId) has no other closing path — without this, a resolved or ignored
+    // candidate stays PENDING in the queue forever, which is exactly the stale-notification
+    // failure the queue redesign (ui-plani.md §4.1) is supposed to make impossible.
+    private void closeReviewQueueItem(UUID organizationId, UUID candidateId) {
         jdbcTemplate.update("""
                 UPDATE hub.operator_queue SET status = 'RESOLVED', updated_at = now(), version = version + 1
                 WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM' AND reference_id = ? AND status = 'PENDING'
                 """,
-                candidate.getOrganizationId(), candidateId);
+                organizationId, candidateId);
     }
 
     private MatchResult recordMapping(UUID organizationId, UUID channelConnectionId, String channelProductId,
