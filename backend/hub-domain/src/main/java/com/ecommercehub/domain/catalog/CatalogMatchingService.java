@@ -195,6 +195,16 @@ public class CatalogMatchingService {
                     'mappingCandidateId', ?::text, 'variantId', ?::text, 'channelVariantId', ?))
                 """,
                 candidate.getOrganizationId(), userId, candidateId, variantId, candidate.getChannelVariantId());
+
+        // queueForReview's operator_queue row (type UNMATCHED_CATALOG_ITEM, reference_id =
+        // candidateId) has no other closing path — without this, a resolved candidate stays
+        // PENDING in the queue forever, which is exactly the stale-notification failure the
+        // queue redesign (ui-plani.md §4.1) is supposed to make impossible.
+        jdbcTemplate.update("""
+                UPDATE hub.operator_queue SET status = 'RESOLVED', updated_at = now(), version = version + 1
+                WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM' AND reference_id = ? AND status = 'PENDING'
+                """,
+                candidate.getOrganizationId(), candidateId);
     }
 
     private MatchResult recordMapping(UUID organizationId, UUID channelConnectionId, String channelProductId,

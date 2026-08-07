@@ -178,5 +178,12 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
                 "SELECT count(*) FROM hub.audit_log WHERE organization_id = ? AND action = 'CATALOG_MAPPING_RESOLVED'",
                 Integer.class, orgId);
         assertThat(auditCount).isEqualTo(1);
+
+        String queueStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.operator_queue WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM' AND reference_id = ?",
+                String.class, orgId, candidateId);
+        assertThat(queueStatus)
+                .withFailMessage("A resolved candidate must close its own operator_queue row — otherwise the queue never empties")
+                .isEqualTo("RESOLVED");
     }
 }

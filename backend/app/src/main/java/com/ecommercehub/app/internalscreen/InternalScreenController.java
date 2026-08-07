@@ -3,6 +3,7 @@ package com.ecommercehub.app.internalscreen;
 import com.ecommercehub.app.security.CurrentUser;
 import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.customer.CustomerErasureService;
+import com.ecommercehub.domain.queue.OperatorQueueService;
 import com.ecommercehub.domain.tenant.TenantContextService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -31,15 +32,18 @@ public class InternalScreenController {
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final CatalogMatchingService catalogMatchingService;
     private final CustomerErasureService customerErasureService;
+    private final OperatorQueueService operatorQueueService;
 
     public InternalScreenController(TenantContextService tenantContextService, JdbcTemplate jdbcTemplate,
                                      CatalogMatchingService catalogMatchingService,
-                                     CustomerErasureService customerErasureService) {
+                                     CustomerErasureService customerErasureService,
+                                     OperatorQueueService operatorQueueService) {
         this.tenantContextService = tenantContextService;
         this.jdbcTemplate = jdbcTemplate;
         this.namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
         this.catalogMatchingService = catalogMatchingService;
         this.customerErasureService = customerErasureService;
+        this.operatorQueueService = operatorQueueService;
     }
 
     @GetMapping("/internal/orders")
@@ -82,14 +86,39 @@ public class InternalScreenController {
                 """);
     }
 
+    /**
+     * Only RETURN_APPROVAL carries a real deadline (return_request.timeout_at, Plan §7's
+     * 48-hour escalation clock) — everything else has no domain-level "due by", so
+     * deadline_at is null and the row is ranked by age instead. Sorting nearest-deadline
+     * first, then oldest-first, matches ui-plani.md §4.1: "a return four hours from its
+     * 48-hour timeout outranks a two-day-old mapping candidate."
+     */
     @GetMapping("/internal/operator-queue")
     @Transactional
     public List<Map<String, Object>> operatorQueue() {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
         return jdbcTemplate.queryForList("""
-                SELECT id, type, description, reference_id, status, created_at
-                FROM hub.operator_queue ORDER BY created_at DESC LIMIT 200
+                SELECT oq.id, oq.type, oq.description, oq.reference_id, oq.status, oq.created_at,
+                       rr.timeout_at AS deadline_at
+                FROM hub.operator_queue oq
+                LEFT JOIN hub.return_request rr
+                       ON oq.type = 'RETURN_APPROVAL' AND rr.id = oq.reference_id
+                WHERE oq.status = 'PENDING'
+                ORDER BY (rr.timeout_at IS NULL), rr.timeout_at ASC, oq.created_at ASC
+                LIMIT 200
                 """);
+    }
+
+    public record DismissQueueItemRequest(String reason) {
+    }
+
+    /** Plan §3's "gürültülü eskalasyon, sessiz kayıp yok" cuts the other way here too: dismissing requires a reason on the record, not a silent disappearance. */
+    @PostMapping("/internal/operator-queue/{id}/dismiss")
+    @Transactional
+    public Map<String, Object> dismissOperatorQueueItem(@PathVariable UUID id, @RequestBody DismissQueueItemRequest request) {
+        tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
+        operatorQueueService.dismiss(CurrentUser.organizationId(), id, CurrentUser.userId(), request.reason());
+        return Map.of("dismissed", true);
     }
 
     /**

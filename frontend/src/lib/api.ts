@@ -139,6 +139,11 @@ export const api = {
 
   operator: {
     queue: () => request<OperatorQueueItem[]>("/internal/operator-queue"),
+    dismiss: (id: string, reason: string) =>
+      request<{ dismissed: boolean }>(`/internal/operator-queue/${id}/dismiss`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }),
   },
 
   returns: {

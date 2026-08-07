@@ -91,6 +91,8 @@ export type OperatorQueueItem = {
   reference_id: string | null;
   status: string;
   created_at: string;
+  /** Only RETURN_APPROVAL carries one — return_request.timeout_at. Null for every other type. */
+  deadline_at: string | null;
 };
 
 export type ReturnSummary = {

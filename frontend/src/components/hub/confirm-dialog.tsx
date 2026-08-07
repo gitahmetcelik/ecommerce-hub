@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -29,23 +30,30 @@ export function ConfirmDialog({
   destructive = true,
   onConfirm,
   testId,
+  requireText,
 }: {
   trigger: ReactNode;
   title: string;
   impact: string;
   confirmLabel?: string;
   destructive?: boolean;
-  onConfirm: () => Promise<void> | void;
+  onConfirm: (text?: string) => Promise<void> | void;
   testId?: string;
+  /** When set, the dialog collects a required free-text field (e.g. a dismiss reason) before confirm is enabled. */
+  requireText?: { label: string; placeholder?: string };
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [text, setText] = useState("");
+
+  const textMissing = Boolean(requireText) && text.trim().length === 0;
 
   async function handleConfirm() {
     setPending(true);
     try {
-      await onConfirm();
+      await onConfirm(requireText ? text.trim() : undefined);
       setOpen(false);
+      setText("");
     } finally {
       setPending(false);
     }
@@ -59,6 +67,16 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription data-testid={testId ? `${testId}-impact` : undefined}>{impact}</DialogDescription>
         </DialogHeader>
+        {requireText && (
+          <Textarea
+            autoFocus
+            placeholder={requireText.placeholder}
+            aria-label={requireText.label}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            data-testid={testId ? `${testId}-reason` : undefined}
+          />
+        )}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
             Cancel
@@ -66,7 +84,7 @@ export function ConfirmDialog({
           <Button
             type="button"
             variant={destructive ? "destructive" : "default"}
-            disabled={pending}
+            disabled={pending || textMissing}
             onClick={handleConfirm}
             data-testid={testId ? `${testId}-confirm` : undefined}
           >

@@ -14,14 +14,16 @@ type BaseProps = {
   testId?: string;
 };
 
-type DecisionAction = { label: string; onClick: () => void; variant?: "default" | "outline" | "destructive"; disabled?: boolean; pending?: boolean; testId?: string };
-
 /**
  * KararKarti (ui-plani.md §4.1) — the operator queue's only building block. The type
  * enforces the plan's rule directly: a row is either a decision (buttons act in place)
  * or a navigation (one link to a workspace) — "asla ikisi birden" (never both).
+ *
+ * `actions` takes rendered elements rather than a config object: some decisions are a
+ * plain button (Approve), others need a confirmation dialog with a reason field first
+ * (Reject, Dismiss) — the card doesn't need to know which.
  */
-type Props = BaseProps & ({ kind: "decision"; actions: DecisionAction[] } | { kind: "navigate"; href: string; actionLabel: string });
+type Props = BaseProps & ({ kind: "decision"; actions: ReactNode[] } | { kind: "navigate"; href: string; actionLabel: string });
 
 export function DecisionCard(props: Props) {
   const { icon, timeLabel, timeTone = "neutral", title, description, testId } = props;
@@ -40,21 +42,9 @@ export function DecisionCard(props: Props) {
         <p className="truncate text-sm font-medium">{title}</p>
         {description && <p className="truncate text-xs text-muted-foreground">{description}</p>}
       </div>
-      <div className="flex shrink-0 gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {props.kind === "decision"
-          ? props.actions.map((action) => (
-              <Button
-                key={action.label}
-                type="button"
-                size="sm"
-                variant={action.variant ?? "outline"}
-                disabled={action.disabled || action.pending}
-                onClick={action.onClick}
-                data-testid={action.testId}
-              >
-                {action.pending ? "…" : action.label}
-              </Button>
-            ))
+          ? props.actions
           : (
               <Button type="button" size="sm" variant="outline" render={<Link href={props.href} />}>
                 {props.actionLabel}
