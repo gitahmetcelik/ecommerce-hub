@@ -29,6 +29,10 @@ function freshState() {
     // and by /_admin/stock (so a test can inject the drift the nightly reconcile is
     // meant to notice). A sku absent from here means the channel reports no stock for it.
     stockBySku: {},
+    // Same idea as stockBySku, for /price/bulk-update — the channel's own idea of the
+    // price, so a coalescing test can assert the LAST of several pushed values actually
+    // landed, not merely that the call count dropped.
+    priceBySku: {},
     // Per-path request counter. Coalescing is only meaningful if the number of CALLS
     // can be shown to have dropped — 50 separate calls each carrying the correct value
     // would sail through a final-value-only assertion while being exactly the failure

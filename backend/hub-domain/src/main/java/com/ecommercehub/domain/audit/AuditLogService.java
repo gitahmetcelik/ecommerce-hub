@@ -32,6 +32,9 @@ public class AuditLogService {
     public static final String RETURN_REJECTED = "RETURN_REJECTED";
     public static final String REFUND_AUTHORIZED = "REFUND_AUTHORIZED";
     public static final String PERMISSION_DENIED = "PERMISSION_DENIED";
+    public static final String PRICE_LIST_SET = "PRICE_LIST_SET";
+    public static final String PRICE_CHANNEL_SET = "PRICE_CHANNEL_SET";
+    public static final String PRICE_CHANNEL_CLEARED = "PRICE_CHANNEL_CLEARED";
 
     private final NamedParameterJdbcTemplate systemJdbcTemplate;
     private final ObjectMapper objectMapper;

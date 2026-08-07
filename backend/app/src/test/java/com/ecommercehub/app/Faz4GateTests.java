@@ -452,18 +452,18 @@ public class Faz4GateTests extends AbstractTestcontainersTest {
         // openWindows is cross-org by design, so its return count covers rows other tests
         // in this class left pending too — the assertions below scope to this org instead.
         windowScheduler.openWindows(firstWindow);
-        assertThat(pushWindowTaskKeys()).containsExactly(connectionA + ":" + firstWindow);
+        assertThat(pushWindowTaskKeys()).containsExactly(connectionA + ":STOCK:" + firstWindow);
 
         windowScheduler.openWindows(firstWindow);
         assertThat(pushWindowTaskKeys())
                 .withFailMessage("Re-running the same window must not queue a second row for it")
-                .containsExactly(connectionA + ":" + firstWindow);
+                .containsExactly(connectionA + ":STOCK:" + firstWindow);
 
         windowScheduler.openWindows(secondWindow);
         assertThat(pushWindowTaskKeys())
                 .withFailMessage("A later window must get its own task — the engine's idempotency key never expires, "
                         + "so a key without a window component would let this connection push exactly once, ever")
-                .containsExactlyInAnyOrder(connectionA + ":" + firstWindow, connectionA + ":" + secondWindow);
+                .containsExactlyInAnyOrder(connectionA + ":STOCK:" + firstWindow, connectionA + ":STOCK:" + secondWindow);
     }
 
     // =========================================================================

@@ -67,8 +67,11 @@ public class PushWindowScheduler {
 
     /** @return how many windows were opened */
     public int openWindows(Instant windowStart) {
+        // Plan v5 §6.2 point 6: distinct on type too — a connection with both a pending
+        // stock row and a pending price row needs one window opened per type, not one
+        // window that only ever claims stock rows.
         List<Map<String, Object>> connections = systemJdbcTemplate.queryForList("""
-                SELECT DISTINCT p.organization_id, p.channel_connection_id
+                SELECT DISTINCT p.organization_id, p.channel_connection_id, p.type
                 FROM hub.channel_push p
                 JOIN hub.channel_connection c ON c.id = p.channel_connection_id
                 WHERE p.status = 'PENDING'
@@ -84,7 +87,8 @@ public class PushWindowScheduler {
         for (Map<String, Object> row : connections) {
             UUID organizationId = (UUID) row.get("organization_id");
             UUID channelConnectionId = (UUID) row.get("channel_connection_id");
-            if (enqueueWindow(organizationId, channelConnectionId, windowStart)) {
+            String type = (String) row.get("type");
+            if (enqueueWindow(organizationId, channelConnectionId, type, windowStart)) {
                 opened++;
             }
         }
@@ -94,11 +98,11 @@ public class PushWindowScheduler {
         return opened;
     }
 
-    private boolean enqueueWindow(UUID organizationId, UUID channelConnectionId, Instant windowStart) {
-        String taskKey = channelConnectionId + ":" + windowStart;
+    private boolean enqueueWindow(UUID organizationId, UUID channelConnectionId, String type, Instant windowStart) {
+        String taskKey = channelConnectionId + ":" + type + ":" + windowStart;
         try {
             String payload = objectMapper.writeValueAsString(
-                    new ChannelPushWindow(organizationId, channelConnectionId, windowStart.toString()));
+                    new ChannelPushWindow(organizationId, channelConnectionId, type, windowStart.toString()));
 
             // The engine would dedupe a repeat submission by idempotency key anyway; this
             // guard just avoids leaving a second work_batch row behind pointing at the

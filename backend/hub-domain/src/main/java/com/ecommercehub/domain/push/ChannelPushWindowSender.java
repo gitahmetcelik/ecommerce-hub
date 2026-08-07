@@ -15,5 +15,10 @@ import java.util.UUID;
 public interface ChannelPushWindowSender {
 
     /** @return how many push rows the channel confirmed in this window */
-    int sendWindow(UUID organizationId, UUID channelConnectionId);
+    int sendWindow(UUID organizationId, UUID channelConnectionId, String type);
+
+    /** Convenience for the stock-only call sites that predate Plan v5 Faz 6's multi-type windows. */
+    default int sendWindow(UUID organizationId, UUID channelConnectionId) {
+        return sendWindow(organizationId, channelConnectionId, ChannelPushService.TYPE_STOCK);
+    }
 }

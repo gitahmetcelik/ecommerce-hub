@@ -38,6 +38,6 @@ public class SendChannelPushTaskHandler implements GorevHandler<ChannelPushWindo
 
     @Override
     public Object calistir(ChannelPushWindow payload, GorevBaglami baglami) {
-        return sender.sendWindow(payload.organizationId(), payload.channelConnectionId());
+        return sender.sendWindow(payload.organizationId(), payload.channelConnectionId(), payload.type());
     }
 }

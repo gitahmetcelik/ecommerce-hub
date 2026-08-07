@@ -50,6 +50,22 @@ public class ConnectorConfig {
     }
 
     /**
+     * Plan v5 §6.2 point 7: a channel that genuinely has no price API. Without a
+     * connector like this actually registered, "a channel with no PRICE_PUSH never
+     * gets a push row" would be an untested claim — every other mock connector declares
+     * PRICE_PUSH.
+     */
+    @Bean
+    public PlatformConnector mockNoPricePushConnector(ObjectMapper objectMapper) {
+        Set<Capability> capabilities = EnumSet.of(
+                Capability.FETCH_ORDERS, Capability.FETCH_CATALOG, Capability.STOCK_PUSH,
+                Capability.RETURN_DECISION_SUBMIT, Capability.SHIPMENT_CREATE,
+                Capability.WEBHOOK, Capability.REQUEST_IDEMPOTENCY_KEY);
+
+        return new MockPlatformConnector(HttpClient.newHttpClient(), objectMapper, "MOCK_NO_PRICE_PUSH", capabilities);
+    }
+
+    /**
      * Plan v5 Faz 4: the first real, non-mock connector. Credentials for this channel
      * type are the JSON {@code {"storeDomain": "...", "accessToken": "..."}} shape
      * {@link ShopifyPlatformConnector}'s own javadoc documents — a Shopify "Develop

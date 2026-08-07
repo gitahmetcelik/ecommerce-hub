@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class ChannelPushService {
 
     public static final String TYPE_STOCK = "STOCK";
+    public static final String TYPE_PRICE = "PRICE";
 
     private final StockAvailabilityService stockAvailabilityService;
     private final ChannelPushStore pushStore;
@@ -54,6 +56,38 @@ public class ChannelPushService {
         for (ChannelAvailability availability : availabilities) {
             pushStore.upsert(organizationId, availability.channelConnectionId(), variantId,
                     TYPE_STOCK, toTargetValueJson(availability));
+        }
+    }
+
+    /**
+     * Plan §6.2 point 5: same coalescing table, a different {@code type}, so a stock
+     * change and a price change to the same variant/channel pair queue as two
+     * independent rows (the UNIQUE is {@code (channel_connection_id, variant_id, type)})
+     * rather than one clobbering the other.
+     */
+    @Transactional
+    public void enqueuePricePush(UUID organizationId, UUID channelConnectionId, UUID variantId,
+                                  String channelVariantId, String sku, String barcode,
+                                  BigDecimal price, BigDecimal discountedPrice) {
+        pushStore.upsert(organizationId, channelConnectionId, variantId, TYPE_PRICE,
+                toPriceTargetValueJson(channelVariantId, sku, barcode, price, discountedPrice));
+    }
+
+    private String toPriceTargetValueJson(String channelVariantId, String sku, String barcode,
+                                           BigDecimal price, BigDecimal discountedPrice) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("channelVariantId", channelVariantId);
+        value.put("sku", sku);
+        value.put("barcode", barcode);
+        // Plain strings, not JSON numbers: jsonb does not preserve a numeric literal's
+        // original scale (10.00 round-trips as 10.0), which is exactly the precision a
+        // money value cannot silently lose.
+        value.put("price", price == null ? null : price.toPlainString());
+        value.put("discountedPrice", discountedPrice == null ? null : discountedPrice.toPlainString());
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize push target value", e);
         }
     }
 

@@ -7,6 +7,7 @@ import com.ecommercehub.connector.ChannelRateLimitedException;
 import com.ecommercehub.connector.CredentialStatus;
 import com.ecommercehub.connector.ItemResult;
 import com.ecommercehub.connector.PlatformConnector;
+import com.ecommercehub.connector.PriceUpdate;
 import com.ecommercehub.connector.StockUpdate;
 import com.ecommercehub.connector.ratelimit.BudgetClass;
 import com.ecommercehub.connector.ratelimit.RateLimitBudget;
@@ -100,13 +101,13 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
 
     /** @return how many rows the channel confirmed this window */
     @Override
-    public int sendWindow(UUID organizationId, UUID channelConnectionId) {
+    public int sendWindow(UUID organizationId, UUID channelConnectionId, String type) {
         if (!circuitBreaker.isCallable(channelConnectionId)) {
             log.debug("Skipping push window for connection {} — circuit open or connection not ACTIVE", channelConnectionId);
             return 0;
         }
 
-        ClaimedWindow window = claim(organizationId, channelConnectionId);
+        ClaimedWindow window = claim(organizationId, channelConnectionId, type);
         if (window == null) {
             return 0;
         }
@@ -123,12 +124,12 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
     }
 
     /** Commits the SENDING claim so a concurrent enqueue can see it and bump the generation past it. */
-    private ClaimedWindow claim(UUID organizationId, UUID channelConnectionId) {
+    private ClaimedWindow claim(UUID organizationId, UUID channelConnectionId, String type) {
         return transactionTemplate.execute(status -> {
             tenantContextService.setTransactionTenantContext(organizationId);
 
             List<ChannelPushRow> rows = pushStore.claimPending(
-                    channelConnectionId, ChannelPushService.TYPE_STOCK, properties.getWindowBatchLimit());
+                    channelConnectionId, type, properties.getWindowBatchLimit());
             if (rows.isEmpty()) {
                 return null;
             }
@@ -142,30 +143,27 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
                     connection.getChannelType(),
                     credentialEncryptionService.decrypt(connection.getEncryptedCredentials(), connection.getKeyVersion()));
 
-            return new ClaimedWindow(rows, connection.getChannelType(), ref);
+            return new ClaimedWindow(rows, type, connection.getChannelType(), ref);
         });
     }
 
     private int callAndClose(UUID organizationId, UUID channelConnectionId, ClaimedWindow window, RateLimitBudget budget) {
         PlatformConnector connector = connectorRegistry.require(window.channelType());
+        boolean isPrice = ChannelPushService.TYPE_PRICE.equals(window.type());
 
         // Keyed by channelVariantId, never sku (Plan v5 §1) — it is the only one of the
         // three identifiers guaranteed present and unique per connection, so it is the
         // only safe correlation key for the bulk result.
         Map<String, ChannelPushRow> byChannelVariantId = new HashMap<>();
-        List<StockUpdate> updates = new ArrayList<>(window.rows().size());
         for (ChannelPushRow row : window.rows()) {
-            JsonNode value = readTargetValue(row);
-            String channelVariantId = value.get("channelVariantId").asText();
-            String sku = textOrNull(value.get("sku"));
-            String barcode = textOrNull(value.get("barcode"));
-            byChannelVariantId.put(channelVariantId, row);
-            updates.add(new StockUpdate(new ChannelItemRef(channelVariantId, sku, barcode), value.get("quantity").asInt()));
+            byChannelVariantId.put(readTargetValue(row).get("channelVariantId").asText(), row);
         }
 
         List<ItemResult> results;
         try {
-            results = connector.updateStock(window.connectionRef(), updates);
+            results = isPrice
+                    ? connector.updatePrice(window.connectionRef(), buildPriceUpdates(window.rows()))
+                    : connector.updateStock(window.connectionRef(), buildStockUpdates(window.rows()));
         } catch (ChannelRateLimitedException e) {
             budget.reportRateLimited(BudgetClass.INTERACTIVE, RATE_LIMIT_BACKOFF);
             inTenant(organizationId, () -> releaseAll(window.rows()));
@@ -186,6 +184,36 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
             return closeResults(window.rows(), byChannelVariantId, results);
         });
         return confirmed == null ? 0 : confirmed;
+    }
+
+    private List<StockUpdate> buildStockUpdates(List<ChannelPushRow> rows) {
+        List<StockUpdate> updates = new ArrayList<>(rows.size());
+        for (ChannelPushRow row : rows) {
+            JsonNode value = readTargetValue(row);
+            updates.add(new StockUpdate(itemRefOf(value), value.get("quantity").asInt()));
+        }
+        return updates;
+    }
+
+    private List<PriceUpdate> buildPriceUpdates(List<ChannelPushRow> rows) {
+        List<PriceUpdate> updates = new ArrayList<>(rows.size());
+        for (ChannelPushRow row : rows) {
+            JsonNode value = readTargetValue(row);
+            updates.add(new PriceUpdate(itemRefOf(value), decimalOrNull(value.get("price")),
+                    decimalOrNull(value.get("discountedPrice"))));
+        }
+        return updates;
+    }
+
+    private static ChannelItemRef itemRefOf(JsonNode value) {
+        return new ChannelItemRef(value.get("channelVariantId").asText(), textOrNull(value.get("sku")),
+                textOrNull(value.get("barcode")));
+    }
+
+    // Stored as a JSON string, not a number — see ChannelPushService.toPriceTargetValueJson
+    // for why a jsonb-backed money value cannot be trusted to keep its original scale.
+    private static java.math.BigDecimal decimalOrNull(JsonNode node) {
+        return node == null || node.isNull() ? null : new java.math.BigDecimal(node.asText());
     }
 
     /**
@@ -303,6 +331,6 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
         }
     }
 
-    private record ClaimedWindow(List<ChannelPushRow> rows, String channelType, ChannelConnectionRef connectionRef) {
+    private record ClaimedWindow(List<ChannelPushRow> rows, String type, String channelType, ChannelConnectionRef connectionRef) {
     }
 }
