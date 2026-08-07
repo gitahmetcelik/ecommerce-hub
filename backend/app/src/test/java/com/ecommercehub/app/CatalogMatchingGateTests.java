@@ -1,5 +1,8 @@
 package com.ecommercehub.app;
 
+import com.ecommercehub.domain.auth.AuthenticatedUser;
+import com.ecommercehub.domain.auth.HubRole;
+import com.ecommercehub.domain.auth.InsufficientRoleException;
 import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.order.OrderEventPayload;
 import com.ecommercehub.domain.order.OrderItemStatus;
@@ -18,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Plan Phase 3 gate: unmatched catalog items never silently vanish, stock is never
@@ -47,6 +51,10 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
                 INSERT INTO hub.channel_connection (id, organization_id, channel_type, encrypted_credentials)
                 VALUES (?, ?, 'MOCK', 'n/a')
                 """, channelConnectionId, orgId);
+    }
+
+    private AuthenticatedUser actor(HubRole role) {
+        return new AuthenticatedUser(UUID.randomUUID(), orgId, "actor@test", List.of(role));
     }
 
     private UUID seedVariant(String sku, String barcode) {
@@ -158,13 +166,12 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     @DisplayName("Phase 3 gate: an operator resolving a mapping_candidate by hand creates a MANUAL mapping and an audit entry")
     void manualResolutionCreatesMappingAndAuditEntry() {
         UUID variantId = seedVariant("MANUAL-TARGET-SKU", null);
-        UUID userId = UUID.randomUUID();
 
         catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-manual", "NO-MATCH", null, "title");
         UUID candidateId = jdbcTemplate.queryForObject(
                 "SELECT id FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-manual'", UUID.class);
 
-        catalogMatchingService.resolveManually(candidateId, variantId, userId);
+        catalogMatchingService.resolveManually(actor(HubRole.OPERATOR), candidateId, variantId);
 
         String mappedVariant = jdbcTemplate.queryForObject(
                 "SELECT variant_id::text FROM hub.channel_product_mapping WHERE channel_variant_id = 'cv-manual'", String.class);
@@ -185,6 +192,27 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
         assertThat(queueStatus)
                 .withFailMessage("A resolved candidate must close its own operator_queue row — otherwise the queue never empties")
                 .isEqualTo("RESOLVED");
+    }
+
+    @Test
+    @DisplayName("v5 Faz 2 gate H6: an OBSERVER cannot resolve a mapping candidate, and the refusal is audited")
+    void observerCannotResolveManually() {
+        UUID variantId = seedVariant("OBSERVER-DENIED-SKU", null);
+        catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-observer-resolve", "NO-MATCH", null, "title");
+        UUID candidateId = jdbcTemplate.queryForObject(
+                "SELECT id FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-observer-resolve'", UUID.class);
+
+        assertThatThrownBy(() -> catalogMatchingService.resolveManually(actor(HubRole.OBSERVER), candidateId, variantId))
+                .isInstanceOf(InsufficientRoleException.class);
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.mapping_candidate WHERE id = ?", String.class, candidateId);
+        assertThat(status).withFailMessage("A refused resolve must leave the candidate exactly as it was").isEqualTo("PENDING");
+
+        Integer deniedCount = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM hub.audit_log WHERE organization_id = ? AND action = 'PERMISSION_DENIED'
+                """, Integer.class, orgId);
+        assertThat(deniedCount).isEqualTo(1);
     }
 
     @Test
@@ -220,13 +248,11 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
     @Test
     @DisplayName("arayuz-3: ignoring a candidate marks it IGNORED, audits it, and closes its queue row without creating a mapping")
     void ignoringCandidateClosesWithoutMapping() {
-        UUID userId = UUID.randomUUID();
-
         catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-ignore-test", "NO-MATCH", null, "title");
         UUID candidateId = jdbcTemplate.queryForObject(
                 "SELECT id FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-ignore-test'", UUID.class);
 
-        catalogMatchingService.ignore(candidateId, userId);
+        catalogMatchingService.ignore(actor(HubRole.OPERATOR), candidateId);
 
         String status = jdbcTemplate.queryForObject(
                 "SELECT status FROM hub.mapping_candidate WHERE id = ?", String.class, candidateId);
@@ -245,5 +271,25 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
                 "SELECT status FROM hub.operator_queue WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM' AND reference_id = ?",
                 String.class, orgId, candidateId);
         assertThat(queueStatus).isEqualTo("RESOLVED");
+    }
+
+    @Test
+    @DisplayName("v5 Faz 2 gate H6: an OBSERVER cannot ignore a mapping candidate, and the refusal is audited")
+    void observerCannotIgnore() {
+        catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-observer-ignore", "NO-MATCH", null, "title");
+        UUID candidateId = jdbcTemplate.queryForObject(
+                "SELECT id FROM hub.mapping_candidate WHERE channel_variant_id = 'cv-observer-ignore'", UUID.class);
+
+        assertThatThrownBy(() -> catalogMatchingService.ignore(actor(HubRole.OBSERVER), candidateId))
+                .isInstanceOf(InsufficientRoleException.class);
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.mapping_candidate WHERE id = ?", String.class, candidateId);
+        assertThat(status).withFailMessage("A refused ignore must leave the candidate exactly as it was").isEqualTo("PENDING");
+
+        Integer deniedCount = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM hub.audit_log WHERE organization_id = ? AND action = 'PERMISSION_DENIED'
+                """, Integer.class, orgId);
+        assertThat(deniedCount).isEqualTo(1);
     }
 }

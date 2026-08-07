@@ -1,5 +1,9 @@
 package com.ecommercehub.domain.catalog;
 
+import com.ecommercehub.domain.audit.AuditLogService;
+import com.ecommercehub.domain.auth.AuthenticatedUser;
+import com.ecommercehub.domain.auth.HubRole;
+import com.ecommercehub.domain.auth.InsufficientRoleException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,19 +35,22 @@ public class CatalogMatchingService {
     private final MappingCandidateRepository candidateRepository;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final AuditLogService auditLogService;
 
     public CatalogMatchingService(ProductRepository productRepository,
                                    VariantRepository variantRepository,
                                    ChannelProductMappingRepository mappingRepository,
                                    MappingCandidateRepository candidateRepository,
                                    JdbcTemplate jdbcTemplate,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   AuditLogService auditLogService) {
         this.productRepository = productRepository;
         this.variantRepository = variantRepository;
         this.mappingRepository = mappingRepository;
         this.candidateRepository = candidateRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.auditLogService = auditLogService;
     }
 
     /**
@@ -211,13 +218,15 @@ public class CatalogMatchingService {
      * automatic backfill-after-the-fact); a human can act on the operator_queue entry.
      */
     @Transactional
-    public void resolveManually(UUID candidateId, UUID variantId, UUID userId) {
+    public void resolveManually(AuthenticatedUser actor, UUID candidateId, UUID variantId) {
+        requireOperator(actor, "resolve a mapping candidate");
+
         MappingCandidate candidate = candidateRepository.findById(candidateId)
                 .orElseThrow(() -> new IllegalArgumentException("No mapping_candidate with id " + candidateId));
 
         mappingRepository.save(new ChannelProductMapping(UUID.randomUUID(), candidate.getOrganizationId(),
                 variantId, candidate.getChannelConnectionId(), candidate.getChannelProductId(),
-                candidate.getChannelVariantId(), ChannelProductMapping.MappingSource.MANUAL, userId));
+                candidate.getChannelVariantId(), ChannelProductMapping.MappingSource.MANUAL, actor.userId()));
 
         candidate.markResolved();
 
@@ -226,7 +235,7 @@ public class CatalogMatchingService {
                 VALUES (gen_random_uuid(), ?, ?, 'CATALOG_MAPPING_RESOLVED', jsonb_build_object(
                     'mappingCandidateId', ?::text, 'variantId', ?::text, 'channelVariantId', ?))
                 """,
-                candidate.getOrganizationId(), userId, candidateId, variantId, candidate.getChannelVariantId());
+                candidate.getOrganizationId(), actor.userId(), candidateId, variantId, candidate.getChannelVariantId());
 
         closeReviewQueueItem(candidate.getOrganizationId(), candidateId);
     }
@@ -239,7 +248,9 @@ public class CatalogMatchingService {
      * forever, since ignoring today says nothing about whether it should stay ignored.
      */
     @Transactional
-    public void ignore(UUID candidateId, UUID userId) {
+    public void ignore(AuthenticatedUser actor, UUID candidateId) {
+        requireOperator(actor, "ignore a mapping candidate");
+
         MappingCandidate candidate = candidateRepository.findById(candidateId)
                 .orElseThrow(() -> new IllegalArgumentException("No mapping_candidate with id " + candidateId));
 
@@ -250,9 +261,23 @@ public class CatalogMatchingService {
                 VALUES (gen_random_uuid(), ?, ?, 'CATALOG_MAPPING_IGNORED', jsonb_build_object(
                     'mappingCandidateId', ?::text, 'channelVariantId', ?))
                 """,
-                candidate.getOrganizationId(), userId, candidateId, candidate.getChannelVariantId());
+                candidate.getOrganizationId(), actor.userId(), candidateId, candidate.getChannelVariantId());
 
         closeReviewQueueItem(candidate.getOrganizationId(), candidateId);
+    }
+
+    /**
+     * Plan v5 §2.5, H6: SecurityConfig is a coarse gate only — the real per-action
+     * decision lives here, the same pattern ReturnFulfilmentService.issueRefund
+     * established. A denied attempt is audited too; the point of an audit trail is
+     * what was tried, not only what succeeded.
+     */
+    private void requireOperator(AuthenticatedUser actor, String action) {
+        if (!actor.hasAtLeast(HubRole.OPERATOR)) {
+            auditLogService.record(actor.organizationId(), actor.userId(), AuditLogService.PERMISSION_DENIED,
+                    Map.of("action", action, "role", actor.effectiveRole().name(), "required", "OPERATOR"));
+            throw new InsufficientRoleException(actor.effectiveRole(), HubRole.OPERATOR);
+        }
     }
 
     // queueForReview's operator_queue row (type UNMATCHED_CATALOG_ITEM, reference_id =

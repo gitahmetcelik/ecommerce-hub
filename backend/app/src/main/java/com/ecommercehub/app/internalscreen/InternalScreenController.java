@@ -1,6 +1,7 @@
 package com.ecommercehub.app.internalscreen;
 
 import com.ecommercehub.app.security.CurrentUser;
+import com.ecommercehub.domain.auth.HubRole;
 import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.customer.CustomerErasureService;
 import com.ecommercehub.domain.queue.OperatorQueueService;
@@ -117,7 +118,7 @@ public class InternalScreenController {
     @Transactional
     public Map<String, Object> dismissOperatorQueueItem(@PathVariable UUID id, @RequestBody DismissQueueItemRequest request) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        operatorQueueService.dismiss(CurrentUser.organizationId(), id, CurrentUser.userId(), request.reason());
+        operatorQueueService.dismiss(CurrentUser.require(), id, request.reason());
         return Map.of("dismissed", true);
     }
 
@@ -146,7 +147,13 @@ public class InternalScreenController {
         return catalogMatchingService.pendingCandidatesWithDetails();
     }
 
-    public record ResolveMappingRequest(UUID variantId, UUID userId) {
+    /**
+     * Plan v5 §2.4, H5: userId used to come from the request body — a client could
+     * resolve a mapping and have the audit trail attribute it to anyone. Jackson
+     * ignores unknown fields by default, so a client still sending userId in the body
+     * is silently no-op rather than a breaking change.
+     */
+    public record ResolveMappingRequest(UUID variantId) {
     }
 
     @PostMapping("/internal/mapping-candidates/{candidateId}/resolve")
@@ -154,20 +161,16 @@ public class InternalScreenController {
     public Map<String, Object> resolveMappingCandidate(@PathVariable UUID candidateId,
                                                          @RequestBody ResolveMappingRequest request) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        catalogMatchingService.resolveManually(candidateId, request.variantId(), request.userId());
+        catalogMatchingService.resolveManually(CurrentUser.require(), candidateId, request.variantId());
         return Map.of("resolved", true);
-    }
-
-    public record IgnoreMappingRequest(UUID userId) {
     }
 
     /** Plan §3 eslesme_adayi.durum = YOKSAYILDI: this channel item is not going to be matched (discontinued, test listing, ...). */
     @PostMapping("/internal/mapping-candidates/{candidateId}/ignore")
     @Transactional
-    public Map<String, Object> ignoreMappingCandidate(@PathVariable UUID candidateId,
-                                                        @RequestBody IgnoreMappingRequest request) {
+    public Map<String, Object> ignoreMappingCandidate(@PathVariable UUID candidateId) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        catalogMatchingService.ignore(candidateId, request.userId());
+        catalogMatchingService.ignore(CurrentUser.require(), candidateId);
         return Map.of("ignored", true);
     }
 
@@ -234,12 +237,28 @@ public class InternalScreenController {
                 "alreadyErased", result.alreadyErased());
     }
 
-    /** motor.olu_mektup_kutusu has no organization_id (Plan §1.1) — this is a system-wide view, not org-scoped. */
+    /**
+     * Plan v5 §2.3, H4: motor.olu_mektup_kutusu has no organization_id (Plan §1.1) and no
+     * RLS of its own — querying it directly, as this used to, showed every organization's
+     * DLQ rows to whichever organization happened to be asking. Joined through
+     * hub.work_batch instead, the same pattern /internal/tasks already uses: work_batch
+     * IS org-scoped (RLS enforces it), so the join is what makes this filtered rather
+     * than the raw table.
+     *
+     * <p>ADMIN-only: task failure messages are diagnostic detail (stack traces, payload
+     * fragments), not something every OBSERVER in the org needs to see either.
+     */
     @GetMapping("/internal/dlq")
+    @Transactional
     public List<Map<String, Object>> deadLetterQueue() {
+        CurrentUser.requireRole(HubRole.ADMIN);
+        tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
         return jdbcTemplate.queryForList("""
-                SELECT id, gorev_id, son_hata, giris_zamani, yeniden_gonderildi_mi
-                FROM motor.olu_mektup_kutusu ORDER BY giris_zamani DESC LIMIT 200
+                SELECT d.id, d.gorev_id, d.son_hata, d.giris_zamani, d.yeniden_gonderildi_mi,
+                       wb.task_type, wb.trace_id
+                FROM motor.olu_mektup_kutusu d
+                JOIN hub.work_batch wb ON wb.task_id = d.gorev_id
+                ORDER BY d.giris_zamani DESC LIMIT 200
                 """);
     }
 }

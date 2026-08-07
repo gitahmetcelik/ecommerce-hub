@@ -1,7 +1,6 @@
 package com.ecommercehub.app.returns;
 
 import com.ecommercehub.connector.CallIntentRef;
-import com.ecommercehub.connector.CallStatus;
 import com.ecommercehub.connector.Capability;
 import com.ecommercehub.connector.ChannelConnectionRef;
 import com.ecommercehub.connector.PlatformConnector;
@@ -39,7 +38,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -65,8 +63,11 @@ public class ReturnFulfilmentService {
 
     private static final Logger log = LoggerFactory.getLogger(ReturnFulfilmentService.class);
 
-    static final String INTENT_SHIPMENT = "SHIPMENT_CREATE";
-    static final String INTENT_REFUND = "REFUND";
+    // Single source of truth for these two intent types lives on the appliers that
+    // recoverStuckIntents dispatches to (Plan v5 §2.2, H3) — duplicating the literal
+    // here would let this constant and the applier's intentType() drift apart silently.
+    static final String INTENT_SHIPMENT = com.ecommercehub.domain.returns.ShipmentCreateIntentOutcomeApplier.TYPE;
+    static final String INTENT_REFUND = com.ecommercehub.domain.returns.RefundIntentOutcomeApplier.TYPE;
 
     private final ReturnService returnService;
     private final ReturnRequestRepository returnRequestRepository;
@@ -303,56 +304,6 @@ public class ReturnFulfilmentService {
 
             returnService.markRefunded(organizationId, returnRequestId);
             return persisted;
-        });
-    }
-
-    /**
-     * Finishes a refund whose call was made but whose result never got written — the
-     * crash case. Asks the channel what happened instead of paying again; when the
-     * channel cannot say either, the intent goes AMBIGUOUS and a human is asked.
-     *
-     * @return true when the outcome was established
-     */
-    public boolean resolveInFlightRefunds(UUID organizationId) {
-        return inTransaction(organizationId, () -> {
-            int resolved = intentService.recoverStuckIntents(intent -> {
-                Optional<ChannelConnection> connection =
-                        channelConnectionRepository.findById(intent.getChannelConnectionId());
-                if (connection.isEmpty()) {
-                    return Optional.empty();
-                }
-
-                PlatformConnector connector = connectorRegistry.require(connection.get().getChannelType());
-                CallStatus status = connector.queryCallStatus(toRef(organizationId, connection.get()),
-                        new CallIntentRef(intent.getId(), intent.getId().toString()));
-
-                if (!status.resolved()) {
-                    return Optional.empty();
-                }
-                applyRecoveredOutcome(organizationId, intent);
-                return Optional.of(status.resultJson());
-            }, java.time.Duration.ZERO);
-
-            return resolved > 0;
-        });
-    }
-
-    /**
-     * A recovered intent has to move the domain too, not just the intent row. Otherwise
-     * the refund is marked resolved while the payment still reads PENDING, and the next
-     * operator to look at it authorises a second one.
-     */
-    private void applyRecoveredOutcome(UUID organizationId, ChannelCallIntent intent) {
-        if (!INTENT_REFUND.equals(intent.getType())) {
-            return;
-        }
-        returnPaymentRepository.findById(intent.getTargetReference()).ifPresent(payment -> {
-            if (ReturnPayment.STATUS_PENDING.equals(payment.getStatus())) {
-                payment.markPaid(null, Instant.now());
-                returnService.markRefunded(organizationId, payment.getReturnRequestId());
-                log.info("Recovered in-flight refund for payment {} — the channel confirms it was already paid",
-                        payment.getId());
-            }
         });
     }
 

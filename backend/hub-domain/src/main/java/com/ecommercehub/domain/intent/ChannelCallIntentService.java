@@ -10,8 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Plan §4.3 / §3 kanal_cagri_niyeti: every side-effecting connector call (ship a
@@ -34,10 +37,14 @@ public class ChannelCallIntentService {
 
     private final ChannelCallIntentRepository repository;
     private final JdbcTemplate jdbcTemplate;
+    private final Map<String, IntentOutcomeApplier> appliersByType;
 
-    public ChannelCallIntentService(ChannelCallIntentRepository repository, JdbcTemplate jdbcTemplate) {
+    public ChannelCallIntentService(ChannelCallIntentRepository repository, JdbcTemplate jdbcTemplate,
+                                     List<IntentOutcomeApplier> appliers) {
         this.repository = repository;
         this.jdbcTemplate = jdbcTemplate;
+        this.appliersByType = appliers.stream()
+                .collect(Collectors.toMap(IntentOutcomeApplier::intentType, Function.identity()));
     }
 
     /**
@@ -98,6 +105,12 @@ public class ChannelCallIntentService {
      * happened, instead of assuming failure and re-calling. An intent the resolver can't
      * resolve either is marked AMBIGUOUS and escalated to the operator queue (Plan §3:
      * "when no outcome can be established: AMBIGUOUS, then the operator queue") rather than left to retry forever.
+     *
+     * <p>Plan v5 §2.2, H3: resolving the intent is only half the job. A type with no
+     * {@link IntentOutcomeApplier} registered is deliberately <em>not</em> marked
+     * resolved — it goes AMBIGUOUS instead, the same as a channel that could not say —
+     * because "resolved at the intent level, untouched at the domain level" is exactly
+     * the silent state this whole mechanism exists to prevent.
      */
     @Transactional
     public int recoverStuckIntents(IntentStatusResolver resolver, java.time.Duration minAge) {
@@ -107,17 +120,30 @@ public class ChannelCallIntentService {
         int resolved = 0;
         for (ChannelCallIntent intent : stuck) {
             Optional<String> response = resolver.queryStatus(intent);
-            if (response.isPresent()) {
+            IntentOutcomeApplier applier = appliersByType.get(intent.getType());
+
+            if (response.isPresent() && applier != null) {
                 intent.recordResult(response.get());
+                applier.apply(intent, response.get());
                 resolved++;
             } else {
-                intent.markAmbiguous();
-                escalateToOperatorQueue(intent);
-                log.warn("Intent {} (type={}, targetReference={}) is AMBIGUOUS after durumSorgula — escalated",
-                        intent.getId(), intent.getType(), intent.getTargetReference());
+                markAmbiguousAndEscalate(intent, response.isPresent());
             }
         }
         return resolved;
+    }
+
+    private void markAmbiguousAndEscalate(ChannelCallIntent intent, boolean channelResolvedIt) {
+        intent.markAmbiguous();
+        escalateToOperatorQueue(intent);
+        if (channelResolvedIt) {
+            log.warn("Intent {} (type={}, targetReference={}) has no registered IntentOutcomeApplier — "
+                            + "escalated instead of applying a domain effect nothing declared",
+                    intent.getId(), intent.getType(), intent.getTargetReference());
+        } else {
+            log.warn("Intent {} (type={}, targetReference={}) is AMBIGUOUS after durumSorgula — escalated",
+                    intent.getId(), intent.getType(), intent.getTargetReference());
+        }
     }
 
     private void escalateToOperatorQueue(ChannelCallIntent intent) {
