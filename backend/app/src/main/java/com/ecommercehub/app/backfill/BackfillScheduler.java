@@ -3,6 +3,7 @@ package com.ecommercehub.app.backfill;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -15,8 +16,12 @@ import java.util.UUID;
  * Enumerating "every connection that still needs backfill" is cross-org, same
  * reasoning as the dispatcher and reservation-expiry sweeps — reuses the existing
  * hub_system pool rather than adding a fourth one.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — see {@link com.ecommercehub.app.reconcile.ReconcileScheduler}'s
+ * javadoc for why sweepers do not run in the "api" process.
  */
 @Component
+@Profile("worker")
 class BackfillScheduler {
 
     private final NamedParameterJdbcTemplate systemJdbcTemplate;

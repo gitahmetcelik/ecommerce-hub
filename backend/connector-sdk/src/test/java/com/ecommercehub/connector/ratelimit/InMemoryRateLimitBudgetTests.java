@@ -6,11 +6,11 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class RateLimitBudgetTests {
+class InMemoryRateLimitBudgetTests {
 
     @Test
     void splitsCapacityFiftyThirtyTwenty() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
 
         assertThat(budget.remaining(BudgetClass.INTERACTIVE)).isEqualTo(50);
         assertThat(budget.remaining(BudgetClass.OPERATIONAL)).isEqualTo(30);
@@ -19,7 +19,7 @@ class RateLimitBudgetTests {
 
     @Test
     void exhaustingItsOwnShareAndHavingNoLowerClassToBorrowFromFailsForBackground() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
         for (int i = 0; i < 20; i++) {
             assertThat(budget.tryAcquire(BudgetClass.BACKGROUND)).isTrue();
         }
@@ -30,7 +30,7 @@ class RateLimitBudgetTests {
 
     @Test
     void interactiveBorrowsFromTheNearestLowerClassWithIdleCapacity() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
         for (int i = 0; i < 50; i++) {
             assertThat(budget.tryAcquire(BudgetClass.INTERACTIVE)).isTrue();
         }
@@ -44,7 +44,7 @@ class RateLimitBudgetTests {
 
     @Test
     void interactiveBorrowsFromBackgroundOnceOperationalIsAlsoExhausted() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
         for (int i = 0; i < 50; i++) {
             budget.tryAcquire(BudgetClass.INTERACTIVE);
         }
@@ -60,7 +60,7 @@ class RateLimitBudgetTests {
 
     @Test
     void operationalBorrowsOnlyFromBackgroundNeverFromInteractive() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
         for (int i = 0; i < 30; i++) {
             assertThat(budget.tryAcquire(BudgetClass.OPERATIONAL)).isTrue();
         }
@@ -76,7 +76,7 @@ class RateLimitBudgetTests {
 
     @Test
     void idleInteractiveCapacityNeverFlowsDownToBackground_noReverseFlow() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
         // INTERACTIVE's 50 sit completely idle.
         for (int i = 0; i < 20; i++) {
             assertThat(budget.tryAcquire(BudgetClass.BACKGROUND)).isTrue();
@@ -89,7 +89,7 @@ class RateLimitBudgetTests {
 
     @Test
     void backgroundSelfBacksOffOn429WithoutAffectingOtherClasses() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
 
         budget.reportRateLimited(BudgetClass.BACKGROUND, Duration.ofMinutes(5));
 
@@ -102,7 +102,7 @@ class RateLimitBudgetTests {
 
     @Test
     void refillRestoresEveryClassToItsFullShare() {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
         for (int i = 0; i < 50; i++) {
             budget.tryAcquire(BudgetClass.INTERACTIVE);
         }

@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -35,8 +36,19 @@ import java.util.UUID;
  * few hundred tenants.
  *
  * <p>Cross-org enumeration runs on the hub_system pool, like every other sweeper.
+ *
+ * <p><b>Plan v5 Faz 5: {@code @Profile("worker")}.</b> Ingest, every sweeper, the
+ * dispatcher and the REST API used to share one process — the "&lt;200ms webhook ACK"
+ * target (Plan §1) was being chased in the same JVM as a nightly full reconcile and
+ * backfill, both of which are explicitly allowed to run for hours (Plan §5). Splitting
+ * into an "api" process (HTTP only, no scheduled work) and a "worker" process (every
+ * sweeper, no HTTP) is what actually protects that latency budget; the profile
+ * annotation is the mechanism, not just documentation of an intent — a bean marked
+ * this way simply does not exist in an "api"-only application context, so there is no
+ * runtime flag to forget to check.
  */
 @Component
+@Profile("worker")
 public class ReconcileScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ReconcileScheduler.class);

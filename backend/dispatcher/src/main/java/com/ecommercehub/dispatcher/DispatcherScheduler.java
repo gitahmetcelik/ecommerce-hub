@@ -2,6 +2,7 @@ package com.ecommercehub.dispatcher;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,8 +17,14 @@ import org.springframework.stereotype.Component;
  * {@code @Scheduled} method is deferred until task-handlers (Phase 0c) exists to
  * host that registration — the methods here are independently callable so gate
  * tests exercise them deterministically without waiting on a timer either way.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — dispatch is background work, so it
+ * runs only in the worker process, not the REST-serving "api" one (see the app
+ * module's ReconcileScheduler for the full rationale — this module cannot depend on
+ * it to link the javadoc directly).
  */
 @Component
+@Profile("worker")
 public class DispatcherScheduler {
 
     private final WorkBatchDispatcher dispatcher;

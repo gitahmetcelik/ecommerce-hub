@@ -5,6 +5,7 @@ import com.ecommercehub.domain.auth.AuthenticationService;
 import com.ecommercehub.domain.auth.HubRole;
 import com.ecommercehub.domain.auth.InsufficientRoleException;
 import com.ecommercehub.domain.auth.InvalidTokenException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -16,8 +17,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.UUID;
 
-/** Plan §10. Thin: every decision lives in {@link AuthenticationService}. */
+/**
+ * Plan §10. Thin: every decision lives in {@link AuthenticationService}.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("api")} — login belongs in the REST-serving process.
+ */
 @RestController
+@Profile("api")
 @RequestMapping("/auth")
 public class AuthController {
 

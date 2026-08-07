@@ -1,6 +1,7 @@
 package com.ecommercehub.ingest;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,8 +18,12 @@ import java.util.UUID;
  * Deliberately thin — reads the raw bytes (Plan §3: HMAC verification must see the
  * exact wire bytes, before Jackson or anything else touches them) and headers, then
  * hands off to {@link WebhookIngestOrchestrator} for everything transactional.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("api")} — the &lt;200ms ACK target is exactly what
+ * the api/worker split protects, so this stays in the process that does nothing else.
  */
 @RestController
+@Profile("api")
 public class WebhookController {
 
     private final WebhookIngestOrchestrator orchestrator;

@@ -20,6 +20,7 @@ import com.ecommercehub.ingest.ConnectorRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,8 +33,11 @@ import java.util.UUID;
  * "the page cursor is persistent"), always through the BACKGROUND budget class (Plan §9:
  * "backfill always runs in the BACKGROUND class"). If the budget has nothing left this tick,
  * the call is a no-op — the scheduler just tries again later, never blocks.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — its only caller is {@code BackfillScheduler}.
  */
 @Service
+@Profile("worker")
 public class BackfillService {
 
     private static final Logger log = LoggerFactory.getLogger(BackfillService.class);
@@ -87,7 +91,7 @@ public class BackfillService {
             return cursor;
         }
 
-        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+        RateLimitBudget budget = budgetRegistry.forConnection(organizationId, channelConnectionId);
         if (!budget.tryAcquire(BudgetClass.BACKGROUND)) {
             log.info("Backfill for connection {} skipped this tick — BACKGROUND budget exhausted", channelConnectionId);
             return cursor;

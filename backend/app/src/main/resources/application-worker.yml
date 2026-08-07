@@ -1,0 +1,8 @@
+# Plan v5 Faz 5: the sweeper/dispatcher process. Every @Scheduled bean and the task
+# engine's own consumer run here; none of the @RestController business endpoints exist
+# in this process (each is @Profile("api")) — only Spring Boot's own actuator routes
+# answer on this port, which is what "HTTP giriş almaz (veya yalnızca actuator)" means
+# in practice: no business traffic is reachable, health checks still are.
+motor:
+  worker:
+    tuketici-aktif: true

@@ -131,7 +131,7 @@ public class BackfillGateTests extends AbstractTestcontainersTest {
     @Test
     @DisplayName("Phase 3 gate: backfill always runs under the BACKGROUND budget class, leaving INTERACTIVE untouched")
     void backfillUsesBackgroundBudgetLeavingInteractiveIntact() {
-        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+        RateLimitBudget budget = budgetRegistry.forConnection(orgId, channelConnectionId);
 
         // Drain BACKGROUND directly, simulating a backfill deep in its run — Plan §9's
         // separation is what lets a stock push triggered mid-backfill still go through

@@ -3,6 +3,7 @@ package com.ecommercehub.app.stock;
 import com.ecommercehub.domain.stock.StockReservationExpiryService;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -16,8 +17,11 @@ import java.util.UUID;
  * dispatcher's existing systemJdbcTemplate bean rather than standing up a second
  * hub_system connection pool; the actual per-org expiry work still runs through the
  * normal RLS-protected path, one tenant context (and one transaction) per org.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — see {@link com.ecommercehub.app.reconcile.ReconcileScheduler}'s javadoc.
  */
 @Component
+@Profile("worker")
 class StockReservationScheduler {
 
     private final NamedParameterJdbcTemplate systemJdbcTemplate;

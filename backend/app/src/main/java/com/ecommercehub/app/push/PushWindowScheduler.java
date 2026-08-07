@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,8 +31,12 @@ import java.util.UUID;
  *
  * <p>Enumerating pending pushes is cross-org, so it uses the hub_system pool like the
  * other sweepers.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — see {@link com.ecommercehub.app.reconcile.ReconcileScheduler}'s
+ * javadoc for why sweepers do not run in the "api" process.
  */
 @Component
+@Profile("worker")
 @EnableConfigurationProperties(PushProperties.class)
 public class PushWindowScheduler {
 

@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -50,8 +51,15 @@ import java.util.UUID;
  * changed mid-flight" — the one case this exists for — would be undetectable. It also
  * keeps a pooled connection from being held open for the duration of a channel's
  * response time.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — its only caller is {@code
+ * SendChannelPushTaskHandler}, invoked exclusively by the task engine's consumer,
+ * which only runs in the worker process (see {@code motor.worker.tuketici-aktif} in
+ * application-api.yml). It also constructor-requires {@link ChannelBudgetRegistry},
+ * itself worker-only, so this could not instantiate under "api" regardless.
  */
 @Service
+@Profile("worker")
 public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPushWindowSender {
 
     private static final Logger log = LoggerFactory.getLogger(ChannelPushSender.class);
@@ -103,7 +111,7 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
             return 0;
         }
 
-        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+        RateLimitBudget budget = budgetRegistry.forConnection(organizationId, channelConnectionId);
         if (!budget.tryAcquire(BudgetClass.INTERACTIVE)) {
             // No budget this tick — hand every row straight back rather than dropping it.
             inTenant(organizationId, () -> releaseAll(window.rows()));

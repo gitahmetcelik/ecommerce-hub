@@ -14,6 +14,7 @@ import com.ecommercehub.connector.ShipmentRequest;
 import com.ecommercehub.connector.ShipmentResult;
 import com.ecommercehub.connector.StockUpdate;
 import com.ecommercehub.connector.ratelimit.BudgetClass;
+import com.ecommercehub.connector.ratelimit.InMemoryRateLimitBudget;
 import com.ecommercehub.connector.ratelimit.RateLimitBudget;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -154,7 +155,7 @@ class Faz1GateTests {
     @Test
     @DisplayName("Phase 1 gate: on 429, BACKGROUND backs off while INTERACTIVE keeps working against the budget")
     void rateLimitBacksOffBackgroundWithoutAffectingInteractive() throws Exception {
-        RateLimitBudget budget = new RateLimitBudget(100);
+        RateLimitBudget budget = new InMemoryRateLimitBudget(100);
 
         // BACKGROUND makes a call, the channel 429s it — this is the real HTTP round trip,
         // not a simulated exception.

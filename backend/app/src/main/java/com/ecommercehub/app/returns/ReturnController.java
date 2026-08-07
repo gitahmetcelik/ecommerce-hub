@@ -7,6 +7,7 @@ import com.ecommercehub.domain.returns.ReturnRequest;
 import com.ecommercehub.domain.returns.ReturnService;
 import com.ecommercehub.domain.returns.Shipment;
 import com.ecommercehub.domain.tenant.TenantContextService;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -31,8 +32,12 @@ import java.util.UUID;
  * <p>Note what is <em>not</em> here: no role checks and no organization parameter. The
  * roles are enforced in the services (so every caller hits them, not just this one) and
  * the tenant comes from the access token.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("api")} — dashboard traffic belongs in the
+ * REST-serving process, not the worker.
  */
 @RestController
+@Profile("api")
 @RequestMapping("/internal/returns")
 public class ReturnController {
 

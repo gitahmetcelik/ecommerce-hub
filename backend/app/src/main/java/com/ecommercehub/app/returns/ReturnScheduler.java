@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -18,8 +19,11 @@ import java.util.UUID;
  * Drives the return approval deadlines. Cross-org enumeration on the hub_system pool,
  * like every other sweeper — and, like them, gated by {@code hub.scheduling.enabled}
  * so cached test contexts do not sweep each other's data.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — see {@link com.ecommercehub.app.reconcile.ReconcileScheduler}'s javadoc.
  */
 @Component
+@Profile("worker")
 public class ReturnScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ReturnScheduler.class);

@@ -22,3 +22,48 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     restart: unless-stopped
+
+  # Plan v5 Faz 5: api and worker are the same image (see ./Dockerfile), split by
+  # SPRING_PROFILES_ACTIVE — api receives webhooks and dashboard traffic and runs no
+  # sweepers; worker runs every @Scheduled sweeper, the dispatcher and the task engine
+  # consumer, and answers no business HTTP route (only actuator).
+  #
+  # Building either needs the private gorev-motoru package — see Dockerfile's header
+  # for the BuildKit secret this expects (never a plain build ARG, never committed).
+  api:
+    build:
+      context: .
+      secrets:
+        - maven_settings
+    container_name: ecommerce-hub-api
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: api
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecommerce_hub_db
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - postgres
+      - rabbitmq
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      secrets:
+        - maven_settings
+    container_name: ecommerce-hub-worker
+    environment:
+      SPRING_PROFILES_ACTIVE: worker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecommerce_hub_db
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - postgres
+      - rabbitmq
+    restart: unless-stopped
+
+secrets:
+  # Points at your own ~/.m2/settings.xml (holding the gorev-motoru PAT) at build
+  # time — see Dockerfile. Never copy this file into the repo or the image itself.
+  maven_settings:
+    file: ${HOME}/.m2/settings.xml

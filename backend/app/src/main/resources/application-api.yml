@@ -1,0 +1,12 @@
+# Plan v5 Faz 5: the REST-serving process. Receives webhooks and dashboard traffic,
+# runs no scheduled work of its own — the <200ms webhook ACK target (Plan §1) is what
+# this split exists to protect, and it cannot be protected in a process that might also
+# be mid-way through an hours-long nightly reconcile (Plan §5).
+#
+# Every @Scheduled sweeper bean is @Profile("worker") already, so they simply do not
+# exist in this process — this file has nothing to toggle for that. The one thing that
+# does need an explicit toggle is the task engine's own consumer, which is not ours to
+# annotate.
+motor:
+  worker:
+    tuketici-aktif: false

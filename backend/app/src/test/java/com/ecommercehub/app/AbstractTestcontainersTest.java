@@ -1,5 +1,6 @@
 package com.ecommercehub.app;
 
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -22,7 +23,17 @@ import org.testcontainers.utility.DockerImageName;
  * found nothing, and acknowledged the message anyway — so the test's task sat at
  * KUYRUKTA forever while its queue read empty. It presented as flakiness and timeouts,
  * never as an error, and it cost real time to find. Tests own their broker now.
+ *
+ * <p><b>Plan v5 Faz 5: both "api" and "worker" active.</b> Splitting the two into
+ * separate processes was for production; the gate tests still want everything in one
+ * context, the same way they did before the split — sweepers autowired and called
+ * directly (never relying on {@code @Scheduled} actually firing, {@code
+ * hub.scheduling.enabled=false} sees to that) alongside the REST controllers. A test
+ * that wants to prove the split itself — that "api" alone has no sweeper beans, that
+ * "worker" alone has no controller beans — activates a single profile on its own
+ * {@code @SpringBootTest}, not here.
  */
+@ActiveProfiles({"api", "worker"})
 public abstract class AbstractTestcontainersTest {
 
     static final PostgreSQLContainer<?> postgres =

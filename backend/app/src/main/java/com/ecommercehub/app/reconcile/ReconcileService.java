@@ -27,6 +27,7 @@ import com.ecommercehub.domain.tenant.TenantContextService;
 import com.ecommercehub.ingest.ConnectorRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -49,8 +50,11 @@ import java.util.UUID;
  * a delta, which is only safe because Plan §6's transitions are target-status
  * idempotent. Without that property, a reconcile followed by a deferred webhook for
  * the same transition would decrement stock twice.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("worker")} — its only caller is {@link ReconcileScheduler}.
  */
 @Service
+@Profile("worker")
 public class ReconcileService {
 
     private static final Logger log = LoggerFactory.getLogger(ReconcileService.class);
@@ -111,7 +115,7 @@ public class ReconcileService {
         ChannelConnection connection = requireConnection(channelConnectionId);
         PlatformConnector connector = connectorRegistry.require(connection.getChannelType());
         ChannelConnectionRef ref = toRef(organizationId, connection);
-        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+        RateLimitBudget budget = budgetRegistry.forConnection(organizationId, channelConnectionId);
 
         int reported = 0;
         int pageNumber = 1; // mock-pazaryeri (and every real channel so far) pages from 1
@@ -185,7 +189,7 @@ public class ReconcileService {
         ChannelConnection connection = requireConnection(channelConnectionId);
         PlatformConnector connector = connectorRegistry.require(connection.getChannelType());
         ChannelConnectionRef ref = toRef(organizationId, connection);
-        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+        RateLimitBudget budget = budgetRegistry.forConnection(organizationId, channelConnectionId);
 
         Instant since = lastOrderSyncAt(channelConnectionId)
                 .map(last -> last.minus(SINCE_OVERLAP))
@@ -240,7 +244,7 @@ public class ReconcileService {
         ChannelConnection connection = requireConnection(channelConnectionId);
         PlatformConnector connector = connectorRegistry.require(connection.getChannelType());
         ChannelConnectionRef ref = toRef(organizationId, connection);
-        RateLimitBudget budget = budgetRegistry.forConnection(channelConnectionId);
+        RateLimitBudget budget = budgetRegistry.forConnection(organizationId, channelConnectionId);
 
         Instant since = lastReturnSyncAt(channelConnectionId)
                 .map(last -> last.minus(SINCE_OVERLAP))

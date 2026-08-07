@@ -6,6 +6,7 @@ import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.customer.CustomerErasureService;
 import com.ecommercehub.domain.queue.OperatorQueueService;
 import com.ecommercehub.domain.tenant.TenantContextService;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -24,8 +25,12 @@ import java.util.UUID;
 /**
  * Plan Phase 2: "an ugly but working internal screen" — plain JSON listings, no UI. A real
  * dashboard is Phase 6; this exists so a human can see what's happening without psql.
+ *
+ * <p>Plan v5 Faz 5: {@code @Profile("api")} — dashboard traffic belongs in the
+ * REST-serving process, not the worker.
  */
 @RestController
+@Profile("api")
 public class InternalScreenController {
 
     private final TenantContextService tenantContextService;
