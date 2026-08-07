@@ -11,6 +11,20 @@ Her satırın karşısındaki değer, resmi geliştirici dokümantasyonundan do�
 bunun için var: spike, tahmini gözleme çevirir. Bu belge o gözlemi taklit etmeye
 çalışmıyor.
 
+> **Revizyon (2026-08-07, Faz 4 başlarken):** Aşağıdaki §3.4 kararı Trendyol'u
+> önermişti — bu hâlâ doğru teknik değerlendirme. Ama Trendyol'un API kimlik
+> bilgileri gerçek bir Seller ID'ye bağlı (bkz. §3.4 sonrası not); ne paylaşımlı
+> test hesabı ne de entegratör-firma yolu, arkasında bir satıcı hesabı olmadan
+> çalışmıyor. Bu projeyi yürüten kullanıcı aktif bir satıcı değil ve satıcı kaydı
+> açmak ya da bir satıcı ortağı bulmak istemiyor. Bu saf bir erişim kısıtı —
+> Trendyol'un teknik uygunluğunu geçersiz kılmıyor. **Faz 4 bu yüzden Shopify ile
+> ilerliyor**: ücretsiz Partner hesabı, şirket/satıcı kaydı gerektirmeyen sınırsız
+> süreli development store. §3.4'teki tablo Shopify'ı zaten ikinci sırada
+> değerlendirmişti (GraphQL + asenkron toplu iş modeli, pazaryeri değil tekil-mağaza
+> şekli) — o riskler hâlâ geçerli ve Faz 4'ün spike'ı bunları doğrulayacak.
+> Trendyol araştırması gelecekte bir satıcı ortağı bulunursa geçerliliğini korur;
+> silinmedi.
+
 ---
 
 ## Trendyol
@@ -153,7 +167,11 @@ dokümantasyon şartlarının **üçünü de** karşılayan **en basit** kanal.
 | Shopier | Bilinmiyor | ❓ **doğrulanamadı** | ✅ açık | En temiz imza şeması ama toplu güncelleme belirsiz |
 | Shopify | **En düşük** (ücretsiz dev store) | ✅ (asenkron iş modeli) | ✅ **en iyi** | Pazaryeri değil; GraphQL + asenkron toplu iş, SDK şekline en az uyan |
 
-**Öneri: Trendyol.**
+**Öneri (bu araştırmanın kendi mantığıyla): Trendyol.**
+**Fiilen uygulanan (bkz. yukarıdaki 2026-08-07 revizyonu): Shopify** — Trendyol'un
+kimlik bilgisi edinme yolu bir satıcı hesabı gerektiriyor ve bu projede o yok. Aşağıdaki
+gerekçe Trendyol için hâlâ doğru; sadece erişim kısıtı yüzünden ikinci sıradaki
+Shopify'a geçildi.
 
 Gerekçe — "en basit" iki eksende okunuyor ve ikisi de Trendyol'u işaret ediyor:
 
@@ -202,5 +220,5 @@ araştırması sorusu değil, bir ürün kararı:
 
 ## Sıradaki adım
 
-Faz 4: `faz-v5-4-trendyol-connector` dalında, spike ile başlayarak (Plan §4.2 sırası
-bozulmadan) Trendyol connector'ı yazılır.
+Faz 4: `faz-v5-4-shopify-connector` dalında, spike ile başlayarak (Plan §4.2 sırası
+bozulmadan) Shopify connector'ı yazılır — yukarıdaki 2026-08-07 revizyonuna bakın.
