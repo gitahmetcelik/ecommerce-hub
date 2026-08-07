@@ -73,7 +73,7 @@ function Matching({ session }: { session: Session }) {
       label: `Matched "${channelLabel(item)}" → ${candidate.sku}`,
       commit: async () => {
         try {
-          await api.matching.resolve(item.id, candidate.variantId, session.userId);
+          await api.matching.resolve(item.id, candidate.variantId);
         } catch (error) {
           toast.error((error as Error).message);
         } finally {
@@ -89,7 +89,7 @@ function Matching({ session }: { session: Session }) {
       label: `Ignored "${channelLabel(item)}"`,
       commit: async () => {
         try {
-          await api.matching.ignore(item.id, session.userId);
+          await api.matching.ignore(item.id);
         } catch (error) {
           toast.error((error as Error).message);
         } finally {

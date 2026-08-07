@@ -1,5 +1,8 @@
 package com.ecommercehub.app;
 
+import com.ecommercehub.domain.auth.AuthenticatedUser;
+import com.ecommercehub.domain.auth.HubRole;
+import com.ecommercehub.domain.auth.InsufficientRoleException;
 import com.ecommercehub.domain.queue.OperatorQueueService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -8,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -48,12 +52,16 @@ public class OperatorQueueGateTests extends AbstractTestcontainersTest {
         return id;
     }
 
+    private AuthenticatedUser actor(HubRole role) {
+        return new AuthenticatedUser(userId, orgId, "actor@test", List.of(role));
+    }
+
     @Test
     @DisplayName("Dismissing a pending row closes it and records why, not just that it was closed")
     void dismissClosesRowAndRecordsReason() {
         UUID itemId = seedQueueItem("CHANNEL_CREDENTIALS_INVALID");
 
-        operatorQueueService.dismiss(orgId, itemId, userId, "Re-authorised manually in the Trendyol seller panel");
+        operatorQueueService.dismiss(actor(HubRole.OPERATOR), itemId, "Re-authorised manually in the Trendyol seller panel");
 
         String status = jdbcTemplate.queryForObject(
                 "SELECT status FROM hub.operator_queue WHERE id = ?", String.class, itemId);
@@ -71,7 +79,7 @@ public class OperatorQueueGateTests extends AbstractTestcontainersTest {
     void dismissRequiresNonBlankReason() {
         UUID itemId = seedQueueItem("DISPATCH_TIMEOUT");
 
-        assertThatThrownBy(() -> operatorQueueService.dismiss(orgId, itemId, userId, "   "))
+        assertThatThrownBy(() -> operatorQueueService.dismiss(actor(HubRole.OPERATOR), itemId, "   "))
                 .isInstanceOf(IllegalArgumentException.class);
 
         String status = jdbcTemplate.queryForObject(
@@ -83,14 +91,35 @@ public class OperatorQueueGateTests extends AbstractTestcontainersTest {
     @DisplayName("Dismissing an already-resolved row fails instead of writing a second audit entry for nothing")
     void dismissingAlreadyResolvedRowFails() {
         UUID itemId = seedQueueItem("ORDER_ITEM_ESCALATION");
-        operatorQueueService.dismiss(orgId, itemId, userId, "First dismissal");
+        operatorQueueService.dismiss(actor(HubRole.OPERATOR), itemId, "First dismissal");
 
-        assertThatThrownBy(() -> operatorQueueService.dismiss(orgId, itemId, userId, "Second attempt"))
+        assertThatThrownBy(() -> operatorQueueService.dismiss(actor(HubRole.OPERATOR), itemId, "Second attempt"))
                 .isInstanceOf(IllegalArgumentException.class);
 
         Integer auditCount = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM hub.audit_log WHERE organization_id = ? AND action = 'OPERATOR_QUEUE_DISMISSED'",
                 Integer.class, orgId);
         assertThat(auditCount).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("v5 Faz 2 gate H6: an OBSERVER cannot dismiss a queue item, and the refusal is audited")
+    void observerCannotDismiss() {
+        UUID itemId = seedQueueItem("CHANNEL_CREDENTIALS_INVALID");
+
+        assertThatThrownBy(() -> operatorQueueService.dismiss(actor(HubRole.OBSERVER), itemId, "trying anyway"))
+                .isInstanceOf(InsufficientRoleException.class);
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM hub.operator_queue WHERE id = ?", String.class, itemId);
+        assertThat(status)
+                .withFailMessage("A refused dismiss must leave the row exactly as it was")
+                .isEqualTo("PENDING");
+
+        Integer deniedCount = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM hub.audit_log
+                WHERE organization_id = ? AND action = 'PERMISSION_DENIED'
+                """, Integer.class, orgId);
+        assertThat(deniedCount).isEqualTo(1);
     }
 }

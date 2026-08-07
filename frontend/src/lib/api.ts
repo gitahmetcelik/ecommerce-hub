@@ -130,15 +130,14 @@ export const api = {
 
   matching: {
     candidates: () => request<MappingCandidate[]>("/internal/mapping-candidates"),
-    resolve: (candidateId: string, variantId: string, userId: string) =>
+    resolve: (candidateId: string, variantId: string) =>
       request<{ resolved: boolean }>(`/internal/mapping-candidates/${candidateId}/resolve`, {
         method: "POST",
-        body: JSON.stringify({ variantId, userId }),
+        body: JSON.stringify({ variantId }),
       }),
-    ignore: (candidateId: string, userId: string) =>
+    ignore: (candidateId: string) =>
       request<{ ignored: boolean }>(`/internal/mapping-candidates/${candidateId}/ignore`, {
         method: "POST",
-        body: JSON.stringify({ userId }),
       }),
   },
 

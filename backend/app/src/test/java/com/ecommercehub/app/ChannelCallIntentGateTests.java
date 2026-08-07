@@ -4,6 +4,7 @@ import com.ecommercehub.domain.intent.ChannelCallIntent;
 import com.ecommercehub.domain.intent.ChannelCallIntentService;
 import com.ecommercehub.domain.intent.DuplicateIntentException;
 import com.ecommercehub.domain.intent.IntentStatus;
+import com.ecommercehub.domain.returns.RefundIntentOutcomeApplier;
 import com.ecommercehub.domain.tenant.TenantContextService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -92,7 +93,8 @@ public class ChannelCallIntentGateTests extends AbstractTestcontainersTest {
     @Test
     @DisplayName("Crash recovery: a SENT intent whose durumSorgula resolves is closed without a second call")
     void stuckIntentResolvedByStatusQueryReachesResultReceived() {
-        ChannelCallIntent intent = intentService.prepare(orgId, channelConnectionId, "PARA_IADESI", UUID.randomUUID(), "{}");
+        ChannelCallIntent intent = intentService.prepare(
+                orgId, channelConnectionId, RefundIntentOutcomeApplier.TYPE, UUID.randomUUID(), "{}");
         intentService.markSent(intent.getId());
         // Process "crashes" here — no recordResult call. Recovery must query, not re-send.
 
@@ -101,6 +103,33 @@ public class ChannelCallIntentGateTests extends AbstractTestcontainersTest {
 
         assertThat(resolved).isEqualTo(1);
         assertThat(reload(intent.getId()).getStatus()).isEqualTo(IntentStatus.RESULT_RECEIVED);
+    }
+
+    /**
+     * Plan v5 §2.2, H3: resolving the intent alone is not enough — a type with no
+     * {@link com.ecommercehub.domain.intent.IntentOutcomeApplier} registered must NOT be
+     * reported as resolved, even when durumSorgula genuinely answers. Marking it
+     * RESULT_RECEIVED here would be exactly the bug this phase closes: an intent that
+     * reads "handled" while nothing downstream ever moved.
+     */
+    @Test
+    @DisplayName("Crash recovery: a resolved SENT intent with no registered outcome applier escalates rather than closing silently")
+    void stuckIntentWithNoRegisteredApplierEscalatesEvenWhenResolved() {
+        ChannelCallIntent intent = intentService.prepare(orgId, channelConnectionId, "PARA_IADESI", UUID.randomUUID(), "{}");
+        intentService.markSent(intent.getId());
+
+        int resolved = intentService.recoverStuckIntents(
+                probed -> Optional.of("{\"resolvedVia\":\"durumSorgula\"}"), Duration.ZERO);
+
+        assertThat(resolved)
+                .withFailMessage("'PARA_IADESI' has no applier registered — the channel answering must not count as resolved")
+                .isEqualTo(0);
+        assertThat(reload(intent.getId()).getStatus()).isEqualTo(IntentStatus.AMBIGUOUS);
+
+        Integer operatorQueueCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.operator_queue WHERE reference_id = ? AND type = 'INTENT_AMBIGUOUS'",
+                Integer.class, intent.getId());
+        assertThat(operatorQueueCount).isEqualTo(1);
     }
 
     @Test

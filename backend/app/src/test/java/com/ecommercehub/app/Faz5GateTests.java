@@ -1,5 +1,6 @@
 package com.ecommercehub.app;
 
+import com.ecommercehub.app.reconcile.ReconcileScheduler;
 import com.ecommercehub.app.returns.ReturnFulfilmentService;
 import com.ecommercehub.domain.auth.AuthenticatedUser;
 import com.ecommercehub.domain.auth.AuthenticationFailedException;
@@ -84,6 +85,7 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
     @Autowired private JwtService jwtService;
     @Autowired private ReturnService returnService;
     @Autowired private ReturnFulfilmentService fulfilmentService;
+    @Autowired private ReconcileScheduler reconcileScheduler;
     @Autowired private ReturnApprovalTimerService timerService;
     @Autowired private OrderProcessingService orderProcessingService;
     @Autowired private StockLedgerService stockLedgerService;
@@ -323,18 +325,58 @@ public class Faz5GateTests extends AbstractTestcontainersTest {
         assertThat(refundsAtChannel()).hasSize(1);
 
         // Simulate the crash: the call happened, the result never got written. Rewind the
-        // intent to SENT and the payment to PENDING — exactly the state a worker killed
-        // between the two would leave behind.
-        jdbcTemplate.update("UPDATE hub.channel_call_intent SET status = 'SENT' WHERE type = 'REFUND'");
+        // intent to SENT (old enough that the sweep's age filter picks it up) and the
+        // payment to PENDING — exactly the state a worker killed between the two would
+        // leave behind.
+        rewindIntentToStuck("REFUND");
         jdbcTemplate.update("UPDATE hub.return_payment SET status = 'PENDING' WHERE id = ?", payment.getId());
 
-        assertThat(fulfilmentService.resolveInFlightRefunds(orgId)).isTrue();
+        // Plan v5 §2.2 H3's gate: recovery goes through the scheduler now, not a
+        // service method nothing in production ever called.
+        reconcileScheduler.resolveStuckIntentsFor(orgId);
 
         assertThat(refundsAtChannel())
                 .withFailMessage("Recovery must ASK the channel what happened — a retry here is a second payment")
                 .hasSize(1);
         assertThat(paymentStatus(payment.getId())).isEqualTo(ReturnPayment.STATUS_PAID);
         assertThat(returnService.get(orgId, returnId).getStatus()).isEqualTo(ReturnStatus.REFUNDED);
+    }
+
+    @Test
+    @DisplayName("Phase 5 gate 5b: a return label whose result was never recorded is resolved the same way, not left unmatched")
+    void test5b_InFlightShipmentIsResolvedNotRepeated() {
+        AuthenticatedUser operator = actor(HubRole.OPERATOR);
+        UUID returnId = openReturn(observingChannel, "SKU-LABELCRASH", 1);
+        returnService.approve(operator, returnId);
+
+        Shipment shipment = fulfilmentService.createReturnShipment(orgId, returnId);
+        assertThat(shipment.getTrackingNumber()).isNotNull();
+
+        // Same simulated crash as gate 5, for SHIPMENT_CREATE: the call happened, the
+        // result never got written back to the shipment row or the return.
+        rewindIntentToStuck("SHIPMENT_CREATE");
+        jdbcTemplate.update(
+                "UPDATE hub.shipment SET tracking_number = NULL, channel_shipment_id = NULL WHERE id = ?",
+                shipment.getId());
+        jdbcTemplate.update("UPDATE hub.return_request SET status = 'ACCEPTED' WHERE id = ?", returnId);
+
+        reconcileScheduler.resolveStuckIntentsFor(orgId);
+
+        String trackingNumber = jdbcTemplate.queryForObject(
+                "SELECT tracking_number FROM hub.shipment WHERE id = ?", String.class, shipment.getId());
+        assertThat(trackingNumber)
+                .withFailMessage("A recovered SHIPMENT_CREATE intent must write the label back to the shipment "
+                        + "row, not just resolve the intent")
+                .isNotNull();
+        assertThat(returnService.get(orgId, returnId).getStatus()).isEqualTo(ReturnStatus.RETURN_SHIPMENT_CREATED);
+    }
+
+    private void rewindIntentToStuck(String intentType) {
+        jdbcTemplate.update("""
+                UPDATE hub.channel_call_intent
+                SET status = 'SENT', updated_at = now() - interval '5 minutes'
+                WHERE organization_id = ? AND type = ?
+                """, orgId, intentType);
     }
 
     // =========================================================================

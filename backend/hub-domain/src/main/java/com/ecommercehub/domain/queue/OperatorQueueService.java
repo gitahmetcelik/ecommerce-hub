@@ -1,6 +1,9 @@
 package com.ecommercehub.domain.queue;
 
 import com.ecommercehub.domain.audit.AuditLogService;
+import com.ecommercehub.domain.auth.AuthenticatedUser;
+import com.ecommercehub.domain.auth.HubRole;
+import com.ecommercehub.domain.auth.InsufficientRoleException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,8 +39,15 @@ public class OperatorQueueService {
         this.auditLogService = auditLogService;
     }
 
+    /** Plan v5 §2.5, H6: the per-action role decision lives here, not in SecurityConfig's coarse URL gate. */
     @Transactional
-    public void dismiss(UUID organizationId, UUID operatorQueueId, UUID userId, String reason) {
+    public void dismiss(AuthenticatedUser actor, UUID operatorQueueId, String reason) {
+        if (!actor.hasAtLeast(HubRole.OPERATOR)) {
+            auditLogService.record(actor.organizationId(), actor.userId(), AuditLogService.PERMISSION_DENIED,
+                    Map.of("action", "dismiss an operator queue item", "role", actor.effectiveRole().name(),
+                            "required", "OPERATOR"));
+            throw new InsufficientRoleException(actor.effectiveRole(), HubRole.OPERATOR);
+        }
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("A reason is required to dismiss an operator queue item");
         }
@@ -45,12 +55,12 @@ public class OperatorQueueService {
         int updated = jdbcTemplate.update("""
                 UPDATE hub.operator_queue SET status = 'RESOLVED', updated_at = now(), version = version + 1
                 WHERE id = ? AND organization_id = ? AND status = 'PENDING'
-                """, operatorQueueId, organizationId);
+                """, operatorQueueId, actor.organizationId());
         if (updated == 0) {
             throw new IllegalArgumentException("No pending operator_queue item " + operatorQueueId);
         }
 
-        auditLogService.record(organizationId, userId, OPERATOR_QUEUE_DISMISSED,
+        auditLogService.record(actor.organizationId(), actor.userId(), OPERATOR_QUEUE_DISMISSED,
                 Map.of("operatorQueueId", operatorQueueId.toString(), "reason", reason));
     }
 }
