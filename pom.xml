@@ -53,6 +53,11 @@
             </dependency>
             <dependency>
                 <groupId>com.ecommercehub</groupId>
+                <artifactId>connector-shopify</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ecommercehub</groupId>
                 <artifactId>ingest</artifactId>
                 <version>${project.version}</version>
             </dependency>

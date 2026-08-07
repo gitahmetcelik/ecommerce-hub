@@ -17,6 +17,7 @@
         <module>hub-domain</module>
         <module>connector-sdk</module>
         <module>connector-mock</module>
+        <module>connector-shopify</module>
         <module>ingest</module>
         <module>dispatcher</module>
         <module>task-handlers</module>

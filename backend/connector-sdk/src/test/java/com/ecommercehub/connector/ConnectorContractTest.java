@@ -1,5 +1,6 @@
 package com.ecommercehub.connector;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -179,8 +180,19 @@ public abstract class ConnectorContractTest {
         assertThat(forged.valid()).isFalse();
     }
 
+    /**
+     * Plan v5 Faz 4 spike finding: this only holds for a channel that accepts a client
+     * idempotency key on shipment creation. Trusting that unconditionally is exactly the
+     * "tahmin, gözlem değil" mistake §4.2 exists to prevent — Shopify's fulfillmentCreate
+     * has no verified client-reference mechanism, so a connector honest about that
+     * (capabilities() without REQUEST_IDEMPOTENCY_KEY) cannot make repeats safe and must
+     * not be made to pretend otherwise. Recovery for such a channel goes through
+     * queryCallStatus instead (see MockBarcodeMarketplaceConnector, Faz 9/10a97bf).
+     */
     @Test
     void repeatingTheSameIntentForAShipmentProducesExactlyOneShipment() {
+        Assumptions.assumeTrue(connector().capabilities().contains(Capability.REQUEST_IDEMPOTENCY_KEY),
+                "connector does not declare REQUEST_IDEMPOTENCY_KEY -- repeats are not expected to be safe");
         resetScenarios();
         CallIntentRef intent = new CallIntentRef(UUID.randomUUID(), UUID.randomUUID().toString());
         ShipmentRequest request = new ShipmentRequest("order-0");

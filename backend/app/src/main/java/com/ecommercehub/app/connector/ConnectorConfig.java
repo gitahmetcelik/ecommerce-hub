@@ -4,6 +4,7 @@ import com.ecommercehub.connector.Capability;
 import com.ecommercehub.connector.PlatformConnector;
 import com.ecommercehub.connector.mock.MockBarcodeMarketplaceConnector;
 import com.ecommercehub.connector.mock.MockPlatformConnector;
+import com.ecommercehub.connector.shopify.ShopifyPlatformConnector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,5 +47,16 @@ public class ConnectorConfig {
     @Bean
     public PlatformConnector mockBarcodeMarketplaceConnector(ObjectMapper objectMapper) {
         return new MockBarcodeMarketplaceConnector(HttpClient.newHttpClient(), objectMapper);
+    }
+
+    /**
+     * Plan v5 Faz 4: the first real, non-mock connector. Credentials for this channel
+     * type are the JSON {@code {"storeDomain": "...", "accessToken": "..."}} shape
+     * {@link ShopifyPlatformConnector}'s own javadoc documents — a Shopify "Develop
+     * apps" custom app token, not an encrypted mock base URL.
+     */
+    @Bean
+    public PlatformConnector shopifyPlatformConnector(ObjectMapper objectMapper) {
+        return new ShopifyPlatformConnector(HttpClient.newHttpClient(), objectMapper);
     }
 }

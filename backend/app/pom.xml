@@ -32,6 +32,10 @@
         </dependency>
         <dependency>
             <groupId>com.ecommercehub</groupId>
+            <artifactId>connector-shopify</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ecommercehub</groupId>
             <artifactId>ingest</artifactId>
         </dependency>
         <dependency>
