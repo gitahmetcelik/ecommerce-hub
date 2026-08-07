@@ -34,6 +34,7 @@ public class StockAvailabilityService {
             SELECT m.channel_connection_id,
                    m.channel_variant_id,
                    v.sku,
+                   v.barcode,
                    c.allocation_priority,
                    COALESCE(b.buffer, 0) AS buffer
             FROM hub.channel_product_mapping m
@@ -76,6 +77,7 @@ public class StockAvailabilityService {
                         (UUID) rs.getObject("channel_connection_id"),
                         rs.getString("channel_variant_id"),
                         rs.getString("sku"),
+                        rs.getString("barcode"),
                         rs.getInt("allocation_priority"),
                         rs.getInt("buffer")));
 
@@ -124,10 +126,10 @@ public class StockAvailabilityService {
         return threshold == null ? 1 : threshold;
     }
 
-    private record MappedChannel(UUID channelConnectionId, String channelVariantId, String sku,
+    private record MappedChannel(UUID channelConnectionId, String channelVariantId, String sku, String barcode,
                                   int allocationPriority, int buffer) {
         ChannelAvailability toAvailability(int quantity) {
-            return new ChannelAvailability(channelConnectionId, channelVariantId, sku, quantity);
+            return new ChannelAvailability(channelConnectionId, channelVariantId, sku, barcode, quantity);
         }
     }
 }

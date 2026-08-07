@@ -115,12 +115,42 @@ public abstract class ConnectorContractTest {
         resetScenarios();
         givenPartialFailureForSkus(Set.of("SKU-1"));
 
-        List<ItemResult> results = connector().updateStock(connection(),
-                List.of(new StockUpdate("SKU-0", 5), new StockUpdate("SKU-1", 5), new StockUpdate("SKU-2", 5)));
+        List<ItemResult> results = connector().updateStock(connection(), List.of(
+                new StockUpdate(new ChannelItemRef("SKU-0", "SKU-0", null), 5),
+                new StockUpdate(new ChannelItemRef("SKU-1", "SKU-1", null), 5),
+                new StockUpdate(new ChannelItemRef("SKU-2", "SKU-2", null), 5)));
 
         assertThat(results).hasSize(3);
         assertThat(results).filteredOn(r -> r.referenceId().equals("SKU-1")).allSatisfy(r -> assertThat(r.success()).isFalse());
         assertThat(results).filteredOn(r -> !r.referenceId().equals("SKU-1")).allSatisfy(r -> assertThat(r.success()).isTrue());
+    }
+
+    /**
+     * Plan §1 (v5 Faz 1): referenceId must always correlate back to the
+     * channelVariantId that was sent — silent drift here is how a SKU-keyed channel's
+     * wire format (which echoes sku, not channelVariantId) leaks into the domain and
+     * breaks correlation the moment sku and channelVariantId genuinely differ.
+     */
+    @Test
+    void everyBulkUpdateResultCorrelatesBackToItsChannelVariantId() {
+        resetScenarios();
+
+        List<StockUpdate> batch = List.of(
+                new StockUpdate(new ChannelItemRef("SKU-0", "SKU-0", null), 5),
+                new StockUpdate(new ChannelItemRef("SKU-1", "SKU-1", null), 5),
+                new StockUpdate(new ChannelItemRef("SKU-2", "SKU-2", null), 5));
+
+        List<ItemResult> results = connector().updateStock(connection(), batch);
+
+        Set<String> sentChannelVariantIds = batch.stream().map(u -> u.item().channelVariantId())
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> resultReferenceIds = results.stream().map(ItemResult::referenceId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertThat(resultReferenceIds)
+                .withFailMessage("Every channelVariantId sent must come back as a referenceId — a missing one "
+                        + "is a bulk result the sender can never close")
+                .isEqualTo(sentChannelVariantIds);
     }
 
     @Test

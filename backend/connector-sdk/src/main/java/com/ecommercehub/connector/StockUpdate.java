@@ -1,4 +1,4 @@
 package com.ecommercehub.connector;
 
-public record StockUpdate(String sku, int availableQuantity) {
+public record StockUpdate(ChannelItemRef item, int availableQuantity) {
 }

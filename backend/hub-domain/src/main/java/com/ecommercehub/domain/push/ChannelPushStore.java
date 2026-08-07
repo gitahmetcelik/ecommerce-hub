@@ -68,6 +68,36 @@ public class ChannelPushStore {
             WHERE id = :id AND generation = :generation
             """;
 
+    /**
+     * Plan v5 §1.7 gate 3: a per-item rejection counts against the row rather than
+     * just bouncing back to PENDING forever. Crossing {@code threshold} moves the row
+     * to STUCK instead of PENDING, which is what actually breaks the retry loop —
+     * PushWindowScheduler and CLAIM_SQL both only look at PENDING rows.
+     */
+    private static final String RECORD_FAILURE_SQL = """
+            UPDATE hub.channel_push
+            SET consecutive_failures = consecutive_failures + 1,
+                status = CASE WHEN consecutive_failures + 1 >= :threshold THEN 'STUCK' ELSE 'PENDING' END,
+                updated_at = now(), version = version + 1
+            WHERE id = :id AND generation = :generation
+            RETURNING consecutive_failures, status
+            """;
+
+    /**
+     * Idempotent on purpose: once a row is STUCK, an enqueue can put it back to PENDING
+     * and a retried attempt can fail again immediately (the failure count is already
+     * past the threshold), which would otherwise raise a fresh operator_queue row every
+     * single window instead of once.
+     */
+    private static final String RAISE_STUCK_ALERT_SQL = """
+            INSERT INTO hub.operator_queue (id, organization_id, type, description, reference_id)
+            SELECT gen_random_uuid(), :org, 'CHANNEL_PUSH_STUCK', :description, :pushId
+            WHERE NOT EXISTS (
+                SELECT 1 FROM hub.operator_queue
+                WHERE type = 'CHANNEL_PUSH_STUCK' AND reference_id = :pushId AND status = 'PENDING'
+            )
+            """;
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public ChannelPushStore(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -107,6 +137,36 @@ public class ChannelPushStore {
     /** Failure path: hand the row back to the next window, unless a newer value already did that for us. */
     public boolean releaseToPending(UUID pushId, long generation) {
         return close(pushId, generation, ChannelPushStatus.PENDING);
+    }
+
+    /**
+     * The channel rejected this specific item (not a whole-call failure). Bumps the
+     * failure streak and, past {@code threshold}, moves the row to STUCK instead of
+     * PENDING so it stops being retried automatically.
+     *
+     * @return the outcome, or {@link FailureOutcome#NOT_APPLIED} if the generation had
+     *         already moved on (a newer value superseded this attempt)
+     */
+    public FailureOutcome recordFailure(UUID pushId, long generation, int threshold) {
+        List<FailureOutcome> rows = jdbcTemplate.query(RECORD_FAILURE_SQL, new MapSqlParameterSource()
+                        .addValue("id", pushId)
+                        .addValue("generation", generation)
+                        .addValue("threshold", threshold),
+                (rs, rowNum) -> new FailureOutcome(true, rs.getInt("consecutive_failures"),
+                        ChannelPushStatus.STUCK.equals(rs.getString("status"))));
+        return rows.isEmpty() ? FailureOutcome.NOT_APPLIED : rows.get(0);
+    }
+
+    /** Idempotent: safe to call every time a row crosses into STUCK, even repeatedly. */
+    public void raiseStuckAlert(UUID organizationId, UUID pushId, String description) {
+        jdbcTemplate.update(RAISE_STUCK_ALERT_SQL, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("pushId", pushId)
+                .addValue("description", description));
+    }
+
+    public record FailureOutcome(boolean applied, int consecutiveFailures, boolean stuck) {
+        public static final FailureOutcome NOT_APPLIED = new FailureOutcome(false, 0, false);
     }
 
     private boolean close(UUID pushId, long generation, String status) {

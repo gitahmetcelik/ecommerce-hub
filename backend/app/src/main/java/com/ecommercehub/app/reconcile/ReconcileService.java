@@ -403,8 +403,13 @@ public class ReconcileService {
     }
 
     private OrderEventPayload toPayload(UUID organizationId, UUID channelConnectionId, ChannelOrder order) {
+        // item.item().sku() is genuinely null on a barcode-keyed channel (Plan v5 §1) —
+        // channelVariantId is the one identifier every shape guarantees, so it is what
+        // stands in for channelProductId too when the channel gives us nothing more
+        // specific to distinguish the two.
         List<OrderEventPayload.OrderEventItem> items = order.items().stream()
-                .map(item -> new OrderEventPayload.OrderEventItem(item.sku(), item.sku(), item.sku(), null,
+                .map(item -> new OrderEventPayload.OrderEventItem(item.item().sku(), item.item().channelVariantId(),
+                        item.item().channelVariantId(), item.item().barcode(),
                         item.quantity(), item.unitPrice(), BigDecimal.ZERO, OrderItemStatus.CREATED))
                 .toList();
 

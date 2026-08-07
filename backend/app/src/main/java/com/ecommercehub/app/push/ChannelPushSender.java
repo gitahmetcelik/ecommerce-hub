@@ -2,6 +2,7 @@ package com.ecommercehub.app.push;
 
 import com.ecommercehub.app.backfill.ChannelBudgetRegistry;
 import com.ecommercehub.connector.ChannelConnectionRef;
+import com.ecommercehub.connector.ChannelItemRef;
 import com.ecommercehub.connector.ChannelRateLimitedException;
 import com.ecommercehub.connector.CredentialStatus;
 import com.ecommercehub.connector.ItemResult;
@@ -140,13 +141,18 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
     private int callAndClose(UUID organizationId, UUID channelConnectionId, ClaimedWindow window, RateLimitBudget budget) {
         PlatformConnector connector = connectorRegistry.require(window.channelType());
 
-        Map<String, ChannelPushRow> bySku = new HashMap<>();
+        // Keyed by channelVariantId, never sku (Plan v5 §1) — it is the only one of the
+        // three identifiers guaranteed present and unique per connection, so it is the
+        // only safe correlation key for the bulk result.
+        Map<String, ChannelPushRow> byChannelVariantId = new HashMap<>();
         List<StockUpdate> updates = new ArrayList<>(window.rows().size());
         for (ChannelPushRow row : window.rows()) {
             JsonNode value = readTargetValue(row);
-            String sku = value.get("sku").asText();
-            bySku.put(sku, row);
-            updates.add(new StockUpdate(sku, value.get("quantity").asInt()));
+            String channelVariantId = value.get("channelVariantId").asText();
+            String sku = textOrNull(value.get("sku"));
+            String barcode = textOrNull(value.get("barcode"));
+            byChannelVariantId.put(channelVariantId, row);
+            updates.add(new StockUpdate(new ChannelItemRef(channelVariantId, sku, barcode), value.get("quantity").asInt()));
         }
 
         List<ItemResult> results;
@@ -169,21 +175,25 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
 
         Integer confirmed = transactionTemplate.execute(status -> {
             tenantContextService.setTransactionTenantContext(organizationId);
-            return closeResults(window.rows(), bySku, results);
+            return closeResults(window.rows(), byChannelVariantId, results);
         });
         return confirmed == null ? 0 : confirmed;
     }
 
     /**
      * Plan §8 requires per-item results precisely so a partial failure can be expressed.
-     * Successful rows close; failed ones go back to PENDING and ride the next window.
+     * Successful rows close; failed ones go back to PENDING and ride the next window —
+     * unless the failure is the row's {@link PushProperties#getMaxConsecutiveFailures()}th
+     * in a row, in which case it goes to STUCK and the operator queue instead of
+     * retrying forever (Plan v5 §1.7 gate 3).
      */
-    private int closeResults(List<ChannelPushRow> claimed, Map<String, ChannelPushRow> bySku, List<ItemResult> results) {
+    private int closeResults(List<ChannelPushRow> claimed, Map<String, ChannelPushRow> byChannelVariantId,
+                              List<ItemResult> results) {
         int confirmed = 0;
         Set<UUID> accountedFor = new HashSet<>();
 
         for (ItemResult result : results) {
-            ChannelPushRow row = bySku.get(result.referenceId());
+            ChannelPushRow row = byChannelVariantId.get(result.referenceId());
             if (row == null) {
                 log.warn("Channel returned a result for unknown reference {} — ignoring", result.referenceId());
                 continue;
@@ -191,8 +201,7 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
             accountedFor.add(row.id());
 
             if (!result.success()) {
-                pushStore.releaseToPending(row.id(), row.generation());
-                log.warn("Push for variant {} rejected by channel: {}", row.variantId(), result.error());
+                handleItemRejection(row, result.error());
                 continue;
             }
             if (pushStore.closeAsSent(row.id(), row.generation())) {
@@ -215,6 +224,31 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
             }
         }
         return confirmed;
+    }
+
+    /**
+     * A per-item rejection (e.g. an identifier the channel does not recognise) counts
+     * against the row's failure streak. Past the threshold the row goes STUCK instead
+     * of PENDING and an operator_queue entry is raised — the alternative is the row
+     * riding every future window forever, failing the same way each time (Plan v5
+     * §1.7 gate 3).
+     */
+    private void handleItemRejection(ChannelPushRow row, String error) {
+        ChannelPushStore.FailureOutcome outcome = pushStore.recordFailure(
+                row.id(), row.generation(), properties.getMaxConsecutiveFailures());
+        log.warn("Push for variant {} rejected by channel: {}", row.variantId(), error);
+
+        if (outcome.stuck()) {
+            pushStore.raiseStuckAlert(row.organizationId(), row.id(),
+                    "Channel repeatedly rejected the push for variant " + row.variantId()
+                            + " (" + outcome.consecutiveFailures() + " consecutive failures): " + error);
+            log.warn("Push row {} (variant {}) marked STUCK after {} consecutive failures — routed to operator queue",
+                    row.id(), row.variantId(), outcome.consecutiveFailures());
+        }
+    }
+
+    private static String textOrNull(JsonNode node) {
+        return node == null || node.isNull() ? null : node.asText();
     }
 
     /**

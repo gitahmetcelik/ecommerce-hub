@@ -63,6 +63,7 @@ public class ChannelPushService {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("channelVariantId", availability.channelVariantId());
         value.put("sku", availability.sku());
+        value.put("barcode", availability.barcode());
         value.put("quantity", availability.quantity());
         try {
             return objectMapper.writeValueAsString(value);

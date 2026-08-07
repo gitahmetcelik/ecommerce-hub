@@ -4,6 +4,7 @@ import com.ecommercehub.connector.CallIntentRef;
 import com.ecommercehub.connector.CallStatus;
 import com.ecommercehub.connector.Capability;
 import com.ecommercehub.connector.ChannelConnectionRef;
+import com.ecommercehub.connector.ChannelItemRef;
 import com.ecommercehub.connector.ChannelOrder;
 import com.ecommercehub.connector.ChannelOrderItem;
 import com.ecommercehub.connector.ChannelProduct;
@@ -116,7 +117,12 @@ public class MockPlatformConnector implements PlatformConnector {
         for (JsonNode o : json.get("items")) {
             List<ChannelOrderItem> items = new ArrayList<>();
             for (JsonNode i : o.get("items")) {
-                items.add(new ChannelOrderItem(i.get("sku").asText(), i.get("quantity").asInt(),
+                // This channel's order feed carries only a sku — whatever the channel
+                // actually gives us (Plan §1). sku doubles as channelVariantId here because
+                // this shape is SKU-keyed; a barcode-keyed channel's items() would leave
+                // sku null and channelVariantId as the barcode instead.
+                String sku = i.get("sku").asText();
+                items.add(new ChannelOrderItem(new ChannelItemRef(sku, sku, null), i.get("quantity").asInt(),
                         new java.math.BigDecimal(i.get("unitPrice").asText())));
             }
             orders.add(new ChannelOrder(o.get("id").asText(), o.get("customerOrderNumber").asText(),
@@ -147,20 +153,20 @@ public class MockPlatformConnector implements PlatformConnector {
     public List<ItemResult> updateStock(ChannelConnectionRef connection, List<StockUpdate> batch) {
         var body = new java.util.HashMap<String, Object>();
         body.put("updates", batch.stream()
-                .map(u -> java.util.Map.of("sku", u.sku(), "quantity", u.availableQuantity()))
+                .map(u -> java.util.Map.of("sku", u.item().sku(), "quantity", u.availableQuantity()))
                 .toList());
         JsonNode json = post(connection, "/stock/bulk-update", body);
-        return toItemResults(json);
+        return toItemResults(json, channelVariantIdsBySku(batch.stream().map(StockUpdate::item)));
     }
 
     @Override
     public List<ItemResult> updatePrice(ChannelConnectionRef connection, List<PriceUpdate> batch) {
         var body = new java.util.HashMap<String, Object>();
         body.put("updates", batch.stream()
-                .map(u -> java.util.Map.of("sku", u.sku(), "price", u.price().toString()))
+                .map(u -> java.util.Map.of("sku", u.item().sku(), "price", u.price().toString()))
                 .toList());
         JsonNode json = post(connection, "/price/bulk-update", body);
-        return toItemResults(json);
+        return toItemResults(json, channelVariantIdsBySku(batch.stream().map(PriceUpdate::item)));
     }
 
     @Override
@@ -251,13 +257,25 @@ public class MockPlatformConnector implements PlatformConnector {
                 json.get("totalPages").asInt(), json.get("hasMore").asBoolean());
     }
 
-    private List<ItemResult> toItemResults(JsonNode json) {
+    /**
+     * This channel's wire format echoes sku back, not channelVariantId — {@link ItemResult#referenceId()}
+     * must always be channelVariantId (Plan §1), so the translation happens here rather
+     * than leaking the channel's own wire vocabulary into the domain.
+     */
+    private static java.util.Map<String, String> channelVariantIdsBySku(java.util.stream.Stream<ChannelItemRef> items) {
+        return items.collect(java.util.stream.Collectors.toMap(ChannelItemRef::sku, ChannelItemRef::channelVariantId,
+                (a, b) -> a));
+    }
+
+    private List<ItemResult> toItemResults(JsonNode json, java.util.Map<String, String> channelVariantIdsBySku) {
         List<ItemResult> results = new ArrayList<>();
         for (JsonNode r : json.get("results")) {
+            String sku = r.get("sku").asText();
+            String channelVariantId = channelVariantIdsBySku.getOrDefault(sku, sku);
             boolean success = r.get("success").asBoolean();
             results.add(success
-                    ? ItemResult.success(r.get("sku").asText())
-                    : ItemResult.failure(r.get("sku").asText(), r.get("error").asText()));
+                    ? ItemResult.success(channelVariantId)
+                    : ItemResult.failure(channelVariantId, r.get("error").asText()));
         }
         return results;
     }

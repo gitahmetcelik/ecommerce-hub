@@ -2,5 +2,5 @@ package com.ecommercehub.connector;
 
 import java.math.BigDecimal;
 
-public record PriceUpdate(String sku, BigDecimal price, BigDecimal discountedPrice) {
+public record PriceUpdate(ChannelItemRef item, BigDecimal price, BigDecimal discountedPrice) {
 }

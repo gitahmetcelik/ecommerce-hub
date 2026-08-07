@@ -3,6 +3,7 @@ package com.ecommercehub.connector.mock;
 import com.ecommercehub.connector.CallIntentRef;
 import com.ecommercehub.connector.Capability;
 import com.ecommercehub.connector.ChannelConnectionRef;
+import com.ecommercehub.connector.ChannelItemRef;
 import com.ecommercehub.connector.ChannelOrder;
 import com.ecommercehub.connector.ChannelRateLimitedException;
 import com.ecommercehub.connector.ItemResult;
@@ -117,8 +118,12 @@ class Faz1GateTests {
         adminPost("/_admin/scenario", Map.of("failSkus", List.of("SKU-1", "SKU-3", "SKU-5")));
 
         List<StockUpdate> batch = List.of(
-                new StockUpdate("SKU-0", 10), new StockUpdate("SKU-1", 10), new StockUpdate("SKU-2", 10),
-                new StockUpdate("SKU-3", 10), new StockUpdate("SKU-4", 10), new StockUpdate("SKU-5", 10));
+                new StockUpdate(new ChannelItemRef("SKU-0", "SKU-0", null), 10),
+                new StockUpdate(new ChannelItemRef("SKU-1", "SKU-1", null), 10),
+                new StockUpdate(new ChannelItemRef("SKU-2", "SKU-2", null), 10),
+                new StockUpdate(new ChannelItemRef("SKU-3", "SKU-3", null), 10),
+                new StockUpdate(new ChannelItemRef("SKU-4", "SKU-4", null), 10),
+                new StockUpdate(new ChannelItemRef("SKU-5", "SKU-5", null), 10));
 
         List<ItemResult> results = connector.updateStock(connection, batch);
 

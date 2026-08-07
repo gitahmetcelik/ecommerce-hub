@@ -57,6 +57,59 @@ router.get('/v2/catalog', (req, res) => {
   res.json({ items, page, pageSize, totalPages, hasMore: page < totalPages });
 });
 
+/**
+ * Bulk stock/price updates for the barcode-keyed shape.
+ *
+ * Unlike the v1 routes, an unrecognised identifier here is rejected per item
+ * (success: false) rather than silently accepted — this channel genuinely has no
+ * concept of a product it never catalogued, so a fixture that shrugged and accepted
+ * anything would hide the real failure mode a barcode-keyed channel has (Plan v5 §1:
+ * the hub must see "unknown identifier" as a rejection, not lose it as a silent no-op).
+ */
+router.post('/v2/stock/bulk-update', (req, res) => {
+  const state = store.get();
+  seedIfEmpty(state);
+  state.marketplace2StockByBarcode = state.marketplace2StockByBarcode || {};
+
+  const known = new Set(state.marketplace2Catalog.map((p) => p.barcode));
+  const updates = req.body.updates || [];
+
+  const results = updates.map((u) => {
+    if (!known.has(u.channelVariantId)) {
+      return { channelVariantId: u.channelVariantId, success: false, error: 'unknown barcode' };
+    }
+    state.marketplace2StockByBarcode[u.channelVariantId] = u.quantity;
+    return { channelVariantId: u.channelVariantId, success: true };
+  });
+
+  res.json({ results });
+});
+
+router.post('/v2/price/bulk-update', (req, res) => {
+  const state = store.get();
+  seedIfEmpty(state);
+  state.marketplace2PriceByBarcode = state.marketplace2PriceByBarcode || {};
+
+  const known = new Set(state.marketplace2Catalog.map((p) => p.barcode));
+  const updates = req.body.updates || [];
+
+  const results = updates.map((u) => {
+    if (!known.has(u.channelVariantId)) {
+      return { channelVariantId: u.channelVariantId, success: false, error: 'unknown barcode' };
+    }
+    state.marketplace2PriceByBarcode[u.channelVariantId] = u.price;
+    return { channelVariantId: u.channelVariantId, success: true };
+  });
+
+  res.json({ results });
+});
+
+// What the channel currently believes it has, keyed by barcode — mirrors GET /stock
+// for the v1 shape, so a test can read the whole picture without paging the catalog.
+router.get('/v2/stock', (req, res) => {
+  res.json({ stockByBarcode: store.get().marketplace2StockByBarcode || {} });
+});
+
 router.get('/v2/orders', (req, res) => {
   const state = store.get();
   seedIfEmpty(state);

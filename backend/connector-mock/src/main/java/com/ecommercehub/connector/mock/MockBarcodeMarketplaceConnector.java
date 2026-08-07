@@ -4,6 +4,7 @@ import com.ecommercehub.connector.CallIntentRef;
 import com.ecommercehub.connector.CallStatus;
 import com.ecommercehub.connector.Capability;
 import com.ecommercehub.connector.ChannelConnectionRef;
+import com.ecommercehub.connector.ChannelItemRef;
 import com.ecommercehub.connector.ChannelOrder;
 import com.ecommercehub.connector.ChannelOrderItem;
 import com.ecommercehub.connector.ChannelProduct;
@@ -118,7 +119,11 @@ public class MockBarcodeMarketplaceConnector implements PlatformConnector {
         for (JsonNode o : json.get("items")) {
             List<ChannelOrderItem> items = new ArrayList<>();
             for (JsonNode line : o.get("lines")) {
-                items.add(new ChannelOrderItem(line.get("barcode").asText(), line.get("quantity").asInt(),
+                // No seller sku on this channel at all — the barcode is the only identifier
+                // it has, so it is both the correlation key and the item's identity (Plan §1:
+                // sku stays null rather than being made to lie about having one).
+                String barcode = line.get("barcode").asText();
+                items.add(new ChannelOrderItem(new ChannelItemRef(barcode, null, barcode), line.get("quantity").asInt(),
                         new BigDecimal(line.get("unitPrice").asText())));
             }
             orders.add(new ChannelOrder(o.get("id").asText(), o.get("id").asText(),
@@ -127,20 +132,26 @@ public class MockBarcodeMarketplaceConnector implements PlatformConnector {
         return toPagedResult(json, orders);
     }
 
+    /**
+     * This channel is barcode-keyed (Plan §1) — {@code channelVariantId} is what goes
+     * on the wire, never sku, and it routes through /v2/stock/bulk-update. The v1 route
+     * (/stock/bulk-update) belongs to the SKU-keyed shape and must never see a call from
+     * this connector.
+     */
     @Override
     public List<ItemResult> updateStock(ChannelConnectionRef connection, List<StockUpdate> batch) {
         var body = java.util.Map.of("updates", batch.stream()
-                .map(u -> java.util.Map.of("sku", u.sku(), "quantity", u.availableQuantity()))
+                .map(u -> java.util.Map.of("channelVariantId", u.item().channelVariantId(), "quantity", u.availableQuantity()))
                 .toList());
-        return toItemResults(post(connection, "/stock/bulk-update", body));
+        return toItemResults(post(connection, "/v2/stock/bulk-update", body));
     }
 
     @Override
     public List<ItemResult> updatePrice(ChannelConnectionRef connection, List<PriceUpdate> batch) {
         var body = java.util.Map.of("updates", batch.stream()
-                .map(u -> java.util.Map.of("sku", u.sku(), "price", u.price().toString()))
+                .map(u -> java.util.Map.of("channelVariantId", u.item().channelVariantId(), "price", u.price().toString()))
                 .toList());
-        return toItemResults(post(connection, "/price/bulk-update", body));
+        return toItemResults(post(connection, "/v2/price/bulk-update", body));
     }
 
     @Override
@@ -210,9 +221,10 @@ public class MockBarcodeMarketplaceConnector implements PlatformConnector {
     private List<ItemResult> toItemResults(JsonNode json) {
         List<ItemResult> results = new ArrayList<>();
         for (JsonNode r : json.get("results")) {
+            String channelVariantId = r.get("channelVariantId").asText();
             results.add(r.get("success").asBoolean()
-                    ? ItemResult.success(r.get("sku").asText())
-                    : ItemResult.failure(r.get("sku").asText(), r.get("error").asText()));
+                    ? ItemResult.success(channelVariantId)
+                    : ItemResult.failure(channelVariantId, r.get("error").asText()));
         }
         return results;
     }
