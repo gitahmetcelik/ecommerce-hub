@@ -94,6 +94,18 @@ public class CatalogMatchingService {
      * catalog feed as a source of truth and creates a variant when nothing matches —
      * appropriate here specifically because we're importing FROM the catalog, not
      * trying to match an incoming order against an already-established one.
+     *
+     * <p>@return null when the item carries neither a sku nor a barcode — a real gap
+     *         found running backfill against a live Shopify dev store (a Gift
+     *         Card-shaped product with neither field set): there is nothing to mint an
+     *         identifier from, so unlike every other branch here this cannot create a
+     *         variant. It goes to {@code mapping_candidate} instead, the same "nothing
+     *         is silently dropped" path {@link #resolve} already uses for its own
+     *         unmatched case — the alternative, letting {@link #createVariant} throw,
+     *         used to poison the whole backfill cycle: one such item made {@link
+     *         com.ecommercehub.app.backfill.BackfillService#runOneCycle} roll back
+     *         forever on the same page, since the cursor is only persisted after the
+     *         page succeeds.
      */
     @Transactional
     public UUID importFromChannel(UUID organizationId, UUID channelConnectionId, String channelProductId,
@@ -102,6 +114,11 @@ public class CatalogMatchingService {
                 .findByOrganizationIdAndChannelConnectionIdAndChannelVariantId(organizationId, channelConnectionId, channelVariantId);
         if (existing.isPresent()) {
             return existing.get().getVariantId();
+        }
+
+        if ((sku == null || sku.isBlank()) && (barcode == null || barcode.isBlank())) {
+            queueForReview(organizationId, channelConnectionId, channelProductId, channelVariantId, barcode, title, List.of());
+            return null;
         }
 
         Match match = findForImport(organizationId, sku, barcode);

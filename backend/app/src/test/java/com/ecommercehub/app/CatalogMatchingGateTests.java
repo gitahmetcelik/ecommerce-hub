@@ -67,6 +67,45 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
         return variantId;
     }
 
+    /**
+     * Bug found running Faz 8's real-Shopify verification: a dev-store item with
+     * neither field (a Gift Card-shaped product) made {@code importFromChannel} throw
+     * from deep inside {@code createVariant}'s SKU-minting, which rolled back the
+     * whole backfill cycle and made {@code BackfillScheduler} retry the same page
+     * forever, every 5 seconds, against a live channel. The fix mirrors {@link
+     * CatalogMatchingService#resolve}'s own unmatched-item path — queue it, return
+     * null, let the rest of the page's items still import.
+     */
+    @Test
+    @DisplayName("Bugfix gate: a catalog item with neither sku nor barcode is queued for review, not thrown, and does not block the rest of the page")
+    void catalogItemWithNeitherSkuNorBarcodeIsQueuedNotThrown() {
+        UUID result = catalogMatchingService.importFromChannel(
+                orgId, channelConnectionId, "cp-giftcard", "cv-giftcard", null, null, "Gift Card");
+
+        assertThat(result)
+                .withFailMessage("Nothing to identify the item by — no variant can be minted for it")
+                .isNull();
+
+        Integer candidateCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.mapping_candidate WHERE organization_id = ? AND channel_variant_id = 'cv-giftcard'",
+                Integer.class, orgId);
+        assertThat(candidateCount).isEqualTo(1);
+
+        Integer operatorQueueCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.operator_queue WHERE organization_id = ? AND type = 'UNMATCHED_CATALOG_ITEM'",
+                Integer.class, orgId);
+        assertThat(operatorQueueCount).isEqualTo(1);
+
+        Integer variantCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.variant WHERE organization_id = ?", Integer.class, orgId);
+        assertThat(variantCount).withFailMessage("No variant must be created when there is no identifier to give it").isZero();
+
+        // The rest of the page must still import — one bad item cannot poison the cycle.
+        UUID normalResult = catalogMatchingService.importFromChannel(
+                orgId, channelConnectionId, "cp-normal", "cv-normal", "SKU-NORMAL", null, "Ordinary product");
+        assertThat(normalResult).isNotNull();
+    }
+
     @Test
     @DisplayName("Phase 3 gate: a completely unmatched item is queued for review, not silently dropped, and touches no stock")
     void unmatchedItemIsQueuedNotDropped() {
