@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -214,6 +215,49 @@ public class VariantScreenGateTests extends AbstractTestcontainersTest {
         assertThat(onHand)
                 .withFailMessage("The rejected second correction must not have applied its delta on top of the first")
                 .isEqualTo(12);
+    }
+
+    // =========================================================================
+    // Bugfix gate: channels comes back as a real array, not a jsonb driver wrapper
+    // =========================================================================
+
+    /**
+     * Bug found running Faz 8's real-Shopify verification: every prior browser check
+     * of the Products screen happened to use a variant with zero channel mappings —
+     * {@code jsonb_agg} returns SQL {@code NULL} for those, and the driver-wrapper
+     * question never came up. A variant with a real mapping exposed it: pgjdbc hands a
+     * {@code jsonb} column back as its own wrapper object, not a {@code String}, so
+     * {@code channels} used to come back shaped {@code {"type":"jsonb","value":"[...]"}}
+     * instead of the array {@code VariantChannelSummary[]} on the frontend expects.
+     */
+    @Test
+    @DisplayName("Bugfix gate: a variant's channels field is a real parsed array, not a jsonb driver wrapper, once it has a mapping")
+    void channelsFieldIsARealArrayOnceMapped() {
+        UUID variantId = insertVariant("SKU-CHANNEL-MAPPED", "Mapped product");
+        UUID channelConnectionId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO hub.channel_connection (id, organization_id, channel_type, encrypted_credentials)
+                VALUES (?, ?, 'MOCK', 'n/a')
+                """, channelConnectionId, orgId);
+        jdbcTemplate.update("""
+                INSERT INTO hub.channel_product_mapping
+                    (organization_id, variant_id, channel_connection_id, channel_product_id, channel_variant_id, mapping_source)
+                VALUES (?, ?, ?, 'cp-1', 'cv-1', 'AUTO_SKU')
+                """, orgId, variantId, channelConnectionId);
+
+        PageResponse<Map<String, Object>> page = inTenantReturning(
+                () -> variantScreenService.list(orgId, new PageRequest(0, 50), "SKU-CHANNEL-MAPPED", null, null, null));
+
+        Object channels = page.items().get(0).get("channels");
+        assertThat(channels)
+                .withFailMessage("channels must be a real List, not a PGobject-shaped wrapper Jackson would "
+                        + "serialize as {\"type\":\"jsonb\",\"value\":\"...\"} instead of an array")
+                .isInstanceOf(List.class);
+        assertThat((List<?>) channels).hasSize(1);
+
+        Optional<Map<String, Object>> detail = inTenantReturning(() -> variantScreenService.detail(orgId, variantId));
+        assertThat(detail).isPresent();
+        assertThat(detail.get().get("channels")).isInstanceOf(List.class);
     }
 
     // =========================================================================

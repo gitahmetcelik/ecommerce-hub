@@ -2,11 +2,15 @@ package com.ecommercehub.domain.catalog;
 
 import com.ecommercehub.domain.paging.PageRequest;
 import com.ecommercehub.domain.paging.PageResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,13 +56,15 @@ public class VariantScreenService {
                 LEFT JOIN hub.channel_price chp
                        ON chp.channel_connection_id = m.channel_connection_id AND chp.variant_id = v.id AND chp.is_active = true
                 WHERE m.variant_id = v.id
-            ) AS channels
+            )::text AS channels
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public VariantScreenService(NamedParameterJdbcTemplate jdbcTemplate) {
+    public VariantScreenService(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public enum StockStatus { IN_STOCK, OUT_OF_STOCK }
@@ -110,7 +116,9 @@ public class VariantScreenService {
                 LEFT JOIN hub.stock s ON s.variant_id = v.id AND s.organization_id = v.organization_id
                 LEFT JOIN hub.price pr ON pr.variant_id = v.id AND pr.organization_id = v.organization_id
                 WHERE
-                """ + where + " ORDER BY v.sku LIMIT :limit OFFSET :offset", params);
+                """ + where + " ORDER BY v.sku LIMIT :limit OFFSET :offset", params).stream()
+                .map(this::withParsedChannels)
+                .toList();
 
         return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
@@ -138,7 +146,7 @@ public class VariantScreenService {
             return Optional.empty();
         }
 
-        Map<String, Object> detail = new java.util.LinkedHashMap<>(rows.get(0));
+        Map<String, Object> detail = withParsedChannels(rows.get(0));
         detail.put("buffers", jdbcTemplate.queryForList("""
                 SELECT channel_connection_id, buffer, updated_at
                 FROM hub.stock_buffer WHERE organization_id = :org AND variant_id = :variant
@@ -149,5 +157,33 @@ public class VariantScreenService {
                 ORDER BY created_at DESC LIMIT 100
                 """, params));
         return Optional.of(detail);
+    }
+
+    /**
+     * Bug found post-Faz-8: pgjdbc hands a {@code jsonb} column back as a
+     * driver-specific wrapper, not a {@code String}, so returning {@code channels}
+     * straight from the row would serialize as {@code {"type":"jsonb","value":"...json
+     * text..."}} instead of the array the frontend's {@code VariantChannelSummary[]}
+     * type expects. This went unnoticed because every browser check of the Products
+     * screen so far used a variant with zero channel mappings — {@code jsonb_agg}
+     * itself returns SQL {@code NULL} for those, sidestepping the driver entirely.
+     * {@code CHANNELS_SUBQUERY} casts to {@code ::text} and this re-parses it, the
+     * same fix {@code ChannelConnectionService.detail} applies to {@code backfill_status}.
+     */
+    private Map<String, Object> withParsedChannels(Map<String, Object> row) {
+        Map<String, Object> copy = new LinkedHashMap<>(row);
+        copy.put("channels", parseChannelsJson((String) row.get("channels")));
+        return copy;
+    }
+
+    private List<Map<String, Object>> parseChannelsJson(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() { });
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Corrupt channels JSON", e);
+        }
     }
 }
