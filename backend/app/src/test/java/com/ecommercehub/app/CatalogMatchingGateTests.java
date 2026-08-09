@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -276,11 +277,25 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
                 .findFirst()
                 .orElseThrow();
 
-        String candidatesJson = row.get("candidates").toString().replace(" ", "");
-        assertThat(candidatesJson).contains("SKU-BUSY").contains("SKU-QUIET");
-        assertThat(candidatesJson)
+        // Bug found post-Faz-8: candidates used to come back as pgjdbc's jsonb driver
+        // wrapper, not a List — a wrapper whose toString() happens to echo the same
+        // JSON text (PGobject.toString() == getValue()), which is exactly why a
+        // string-matching assertion here would never have caught it either way. These
+        // assertions read the parsed structure directly instead.
+        assertThat(row.get("candidates"))
+                .withFailMessage("candidates must be a real List, not a PGobject-shaped jsonb driver wrapper")
+                .isInstanceOf(List.class);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> candidates = (List<Map<String, Object>>) row.get("candidates");
+        Set<Object> skus = candidates.stream().map(c -> c.get("sku")).collect(java.util.stream.Collectors.toSet());
+        assertThat(skus).contains("SKU-BUSY", "SKU-QUIET");
+
+        Map<String, Object> busyCandidate = candidates.stream()
+                .filter(c -> "SKU-BUSY".equals(c.get("sku"))).findFirst().orElseThrow();
+        assertThat(busyCandidate.get("openOrderItems"))
                 .withFailMessage("The variant with one open order item must report openOrderItems=1, not 0")
-                .contains("\"openOrderItems\":1");
+                .isEqualTo(1);
 
         assertThat(busyVariant).isNotEqualTo(quietVariant);
     }

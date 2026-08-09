@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -107,6 +108,28 @@ public class OrderProcessingService {
 
         order.observeEvent(event.channelEventAt(), event.channelEventSequence());
         recomputeDerivedStatus(order);
+    }
+
+    /**
+     * Same as {@link #process}, but in its own transaction — for a caller walking many
+     * orders in one page (backfill, reconcile) rather than handling a single webhook.
+     *
+     * <p>Bug found post-Faz-8, running real backfill against a live Shopify store:
+     * {@link #process} is {@code @Transactional} with the default REQUIRED propagation,
+     * so when called in a loop from an already-{@code @Transactional} caller it
+     * <em>joins</em> that caller's transaction rather than opening its own. When one
+     * order throws (a deferred transition, a malformed real-world order shape), Spring
+     * marks the whole shared transaction rollback-only the moment the exception
+     * propagates out of {@code process}'s own proxy boundary — catching it at the call
+     * site does not undo that. The caller's page would fail at commit with an {@code
+     * UnexpectedRollbackException} regardless, discarding every other order already
+     * processed in the same page and the page cursor itself, forever retrying the same
+     * page against the same poison order. {@code REQUIRES_NEW} confines that damage to
+     * this one order's own transaction.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processIsolated(OrderEventPayload event) {
+        process(event);
     }
 
     private SalesOrder findOrCreateOrder(OrderEventPayload event) {

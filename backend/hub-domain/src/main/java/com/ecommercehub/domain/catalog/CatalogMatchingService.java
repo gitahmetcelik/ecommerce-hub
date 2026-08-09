@@ -6,6 +6,7 @@ import com.ecommercehub.domain.auth.HubRole;
 import com.ecommercehub.domain.auth.InsufficientRoleException;
 import com.ecommercehub.domain.paging.PageRequest;
 import com.ecommercehub.domain.paging.PageResponse;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +64,13 @@ public class CatalogMatchingService {
      * anything with exactly one clean match before a mapping_candidate row is ever written,
      * so "which one is right" is always a real judgment call by the time it reaches this
      * screen, never a formality.
+     *
+     * <p>Bug found post-Faz-8: {@code candidates} used to come back from {@code
+     * jdbcTemplate.queryForList} as pgjdbc's driver-specific {@code jsonb} wrapper, not
+     * a {@code String}/array — the same bug {@code VariantScreenService.channels} had.
+     * The subquery now casts to {@code ::text} and the result is reparsed below before
+     * it reaches the controller, so the frontend actually gets the {@code
+     * CandidateVariant[]} it's typed for instead of {@code {"type":"jsonb","value":"..."}}.
      */
     public PageResponse<Map<String, Object>> pendingCandidatesWithDetails(PageRequest pageRequest) {
         Long total = jdbcTemplate.queryForObject(
@@ -82,11 +90,28 @@ public class CatalogMatchingService {
                            FROM jsonb_array_elements_text(COALESCE(mc.candidate_variant_ids, '[]'::jsonb)) AS cand(variant_id)
                            JOIN hub.variant v ON v.id = cand.variant_id::uuid
                            JOIN hub.product p ON p.id = v.product_id
-                       ) AS candidates
+                       )::text AS candidates
                 FROM hub.mapping_candidate mc
                 WHERE mc.status = 'PENDING' ORDER BY mc.created_at LIMIT ? OFFSET ?
-                """, pageRequest.size(), pageRequest.offset());
+                """, pageRequest.size(), pageRequest.offset()).stream()
+                .map(row -> {
+                    Map<String, Object> copy = new java.util.LinkedHashMap<>(row);
+                    copy.put("candidates", parseCandidatesJson((String) row.get("candidates")));
+                    return copy;
+                })
+                .toList();
         return PageResponse.of(pageRequest, total == null ? 0 : total, items);
+    }
+
+    private List<Map<String, Object>> parseCandidatesJson(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() { });
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("Corrupt candidates JSON", e);
+        }
     }
 
     /**

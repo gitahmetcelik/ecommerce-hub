@@ -209,8 +209,22 @@ public class ReconcileService {
 
             PagedResult<ChannelOrder> page = connector.fetchOrders(ref, since, new Page(pageNumber, PAGE_SIZE));
             for (ChannelOrder order : page.items()) {
-                orderProcessingService.process(toPayload(organizationId, channelConnectionId, order));
-                observed++;
+                // Bug found post-Faz-8: process() joins this method's own @Transactional
+                // (REQUIRED), so one order throwing (a deferred transition, a malformed
+                // real-world order) marked the whole delta-reconcile window rollback-only
+                // — undetectable here because Spring does that the moment the exception
+                // crosses process()'s own transactional boundary, before a catch at this
+                // call site ever runs. markSynced() below would never be reached, so the
+                // same window (and the same poison order) got re-walked forever, silently
+                // blocking recovery for every other order in it too — exactly the failure
+                // this reconcile pass exists to prevent. processIsolated() runs the order
+                // in its own transaction, so a failure here can't take the window with it.
+                try {
+                    orderProcessingService.processIsolated(toPayload(organizationId, channelConnectionId, order));
+                    observed++;
+                } catch (RuntimeException e) {
+                    escalateUnresolvableOrder(organizationId, channelConnectionId, order.channelOrderId(), e);
+                }
             }
             hasMore = page.hasMore();
             pageNumber++;
@@ -310,6 +324,24 @@ public class ReconcileService {
 
         return returnService.recordChannelReturnIfNew(organizationId, order.get().id(),
                 channelReturn.channelReturnId(), channelReturn.status(), items).created();
+    }
+
+    private void escalateUnresolvableOrder(UUID organizationId, UUID channelConnectionId, String channelOrderId, RuntimeException cause) {
+        jdbcTemplate.update("""
+                INSERT INTO hub.operator_queue (id, organization_id, type, description, reference_id)
+                SELECT gen_random_uuid(), :org, 'ORDER_RECONCILE_FAILED', :description, NULL
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM hub.operator_queue
+                    WHERE organization_id = :org AND type = 'ORDER_RECONCILE_FAILED'
+                      AND description = :description AND status = 'PENDING'
+                )
+                """, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("description", "Channel connection " + channelConnectionId + " order " + channelOrderId
+                        + " could not be reconciled: " + cause.getMessage()));
+
+        log.warn("Order {} from connection {} could not be reconciled — escalated rather than dropped",
+                channelOrderId, channelConnectionId, cause);
     }
 
     private void escalateUnresolvableReturn(UUID organizationId, ChannelReturn channelReturn, String reason) {

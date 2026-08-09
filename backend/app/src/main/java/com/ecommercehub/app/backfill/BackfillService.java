@@ -21,6 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +53,7 @@ public class BackfillService {
     private final TenantContextService tenantContextService;
     private final ObjectMapper objectMapper;
     private final BackfillProperties properties;
+    private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public BackfillService(ChannelConnectionRepository channelConnectionRepository,
                             CredentialEncryptionService credentialEncryptionService,
@@ -60,7 +63,8 @@ public class BackfillService {
                             ChannelBudgetRegistry budgetRegistry,
                             TenantContextService tenantContextService,
                             ObjectMapper objectMapper,
-                            BackfillProperties properties) {
+                            BackfillProperties properties,
+                            NamedParameterJdbcTemplate jdbcTemplate) {
         this.channelConnectionRepository = channelConnectionRepository;
         this.credentialEncryptionService = credentialEncryptionService;
         this.connectorRegistry = connectorRegistry;
@@ -70,6 +74,7 @@ public class BackfillService {
         this.tenantContextService = tenantContextService;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -128,8 +133,23 @@ public class BackfillService {
                                          ChannelConnectionRef connectionRef, BackfillCursor cursor) {
         PagedResult<ChannelOrder> page = connector.fetchOrders(connectionRef, cursor.orderSince(), new Page(cursor.orderPage(), properties.getPageSize()));
 
+        // Bug found running real backfill against a live Shopify store: process() joins
+        // this method's own @Transactional (REQUIRED), so one order throwing — a
+        // deferred transition, or a real order shape toOrderEventPayload doesn't expect
+        // (a null unitPrice on a gift-card line, say) — marked the WHOLE page's shared
+        // transaction rollback-only, the moment the exception crossed process()'s own
+        // transactional boundary. writeCursor() in runOneCycle would never be reached,
+        // so the same page (and the same poison order) retried forever, every 5s,
+        // against the live channel — the same shape of bug already fixed in
+        // runCatalogPage's importFromChannel call, just harder to spot because Spring's
+        // rollback-only marking happens regardless of whether the caller catches the
+        // exception. processIsolated() runs each order in its own transaction.
         for (ChannelOrder order : page.items()) {
-            orderProcessingService.process(toOrderEventPayload(organizationId, channelConnectionId, order));
+            try {
+                orderProcessingService.processIsolated(toOrderEventPayload(organizationId, channelConnectionId, order));
+            } catch (RuntimeException e) {
+                escalateUnresolvableOrder(organizationId, channelConnectionId, order.channelOrderId(), e);
+            }
         }
 
         log.info("Backfill order page {} for connection {}: {} order(s), hasMore={}",
@@ -140,6 +160,24 @@ public class BackfillService {
         }
         log.info("Backfill complete for connection {}", channelConnectionId);
         return cursor.withOrdersDone(java.time.Instant.now());
+    }
+
+    private void escalateUnresolvableOrder(UUID organizationId, UUID channelConnectionId, String channelOrderId, RuntimeException cause) {
+        jdbcTemplate.update("""
+                INSERT INTO hub.operator_queue (id, organization_id, type, description, reference_id)
+                SELECT gen_random_uuid(), :org, 'ORDER_RECONCILE_FAILED', :description, NULL
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM hub.operator_queue
+                    WHERE organization_id = :org AND type = 'ORDER_RECONCILE_FAILED'
+                      AND description = :description AND status = 'PENDING'
+                )
+                """, new MapSqlParameterSource()
+                .addValue("org", organizationId)
+                .addValue("description", "Channel connection " + channelConnectionId + " order " + channelOrderId
+                        + " could not be backfilled: " + cause.getMessage()));
+
+        log.warn("Order {} from connection {} could not be backfilled — escalated rather than dropped",
+                channelOrderId, channelConnectionId, cause);
     }
 
     /**

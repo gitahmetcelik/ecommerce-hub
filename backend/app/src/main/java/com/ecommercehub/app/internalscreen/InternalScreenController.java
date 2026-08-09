@@ -222,8 +222,13 @@ public class InternalScreenController {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
         PageRequest pageRequest = PageRequest.of(page, size);
         Long total = jdbcTemplate.queryForObject("SELECT count(*) FROM hub.channel_push", Long.class);
+        // Faz 4's ChannelPush.target_value is rendered raw in the dashboard's "Pending
+        // pushes" table (frontend/src/app/stock/page.tsx renders it inside <code>), so
+        // unlike channels/candidates (structured data the client consumes as objects)
+        // this one only needs the ::text cast, never a Java-side reparse into a Map —
+        // parsing it back would hand the client an object where it expects a string.
         List<Map<String, Object>> items = jdbcTemplate.queryForList("""
-                SELECT id, channel_connection_id, variant_id, type, target_value, generation, status,
+                SELECT id, channel_connection_id, variant_id, type, target_value::text AS target_value, generation, status,
                        last_attempt_at, updated_at
                 FROM hub.channel_push ORDER BY updated_at DESC LIMIT ? OFFSET ?
                 """, pageRequest.size(), pageRequest.offset());

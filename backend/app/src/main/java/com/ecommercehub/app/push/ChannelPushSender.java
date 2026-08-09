@@ -151,16 +151,25 @@ public class ChannelPushSender implements com.ecommercehub.domain.push.ChannelPu
         PlatformConnector connector = connectorRegistry.require(window.channelType());
         boolean isPrice = ChannelPushService.TYPE_PRICE.equals(window.type());
 
-        // Keyed by channelVariantId, never sku (Plan v5 §1) — it is the only one of the
-        // three identifiers guaranteed present and unique per connection, so it is the
-        // only safe correlation key for the bulk result.
-        Map<String, ChannelPushRow> byChannelVariantId = new HashMap<>();
-        for (ChannelPushRow row : window.rows()) {
-            byChannelVariantId.put(readTargetValue(row).get("channelVariantId").asText(), row);
-        }
-
         List<ItemResult> results;
+        Map<String, ChannelPushRow> byChannelVariantId;
         try {
+            // Keyed by channelVariantId, never sku (Plan v5 §1) — it is the only one of
+            // the three identifiers guaranteed present and unique per connection, so it
+            // is the only safe correlation key for the bulk result.
+            //
+            // Bug found post-Faz-8: this map-building loop used to run BEFORE this try
+            // block. A single row with corrupt or incomplete target_value JSON threw
+            // straight out of callAndClose — past claim()'s already-committed SENDING
+            // status, with nothing to release the claimed rows back to PENDING. They
+            // stayed SENDING forever: claimPending only ever selects PENDING rows, so
+            // this was a silent, permanent loss of every row in the window, worse than
+            // the retry-forever shape the other failure branches here already avoid.
+            byChannelVariantId = new HashMap<>();
+            for (ChannelPushRow row : window.rows()) {
+                byChannelVariantId.put(readTargetValue(row).get("channelVariantId").asText(), row);
+            }
+
             results = isPrice
                     ? connector.updatePrice(window.connectionRef(), buildPriceUpdates(window.rows()))
                     : connector.updateStock(window.connectionRef(), buildStockUpdates(window.rows()));
