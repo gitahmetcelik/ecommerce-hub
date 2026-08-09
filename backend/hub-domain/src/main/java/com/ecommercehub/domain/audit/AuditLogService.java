@@ -37,6 +37,10 @@ public class AuditLogService {
     public static final String PRICE_CHANNEL_CLEARED = "PRICE_CHANNEL_CLEARED";
     public static final String STOCK_MANUALLY_ADJUSTED = "STOCK_MANUALLY_ADJUSTED";
     public static final String STOCK_BUFFER_SET = "STOCK_BUFFER_SET";
+    public static final String CHANNEL_CONNECTION_CREATED = "CHANNEL_CONNECTION_CREATED";
+    public static final String CHANNEL_CONNECTION_CREDENTIALS_ROTATED = "CHANNEL_CONNECTION_CREDENTIALS_ROTATED";
+    public static final String CHANNEL_CONNECTION_SETTINGS_UPDATED = "CHANNEL_CONNECTION_SETTINGS_UPDATED";
+    public static final String CHANNEL_CONNECTION_BACKFILL_TRIGGERED = "CHANNEL_CONNECTION_BACKFILL_TRIGGERED";
 
     private final NamedParameterJdbcTemplate systemJdbcTemplate;
     private final ObjectMapper objectMapper;

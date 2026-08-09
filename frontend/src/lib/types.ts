@@ -80,6 +80,41 @@ export type ChannelConnection = {
   allocation_priority: number;
 };
 
+/** Plan §8.2 point 6 — page-cursor backfill progress, no total count exists to compute a percentage from. */
+export type BackfillCursor = {
+  catalogPage: number;
+  catalogDone: boolean;
+  orderPage: number;
+  orderSince: string;
+  ordersDone: boolean;
+};
+
+export type ChannelBudgetRow = {
+  budget_class: string;
+  tokens: number;
+  refilled_at: string;
+  backoff_until: string | null;
+};
+
+export type ChannelConnectionDetail = {
+  id: string;
+  channel_type: string;
+  status: string;
+  consecutive_failures: number;
+  circuit_open_until: string | null;
+  last_failure_reason: string | null;
+  reconcile_interval_minutes: number;
+  next_reconcile_at: string | null;
+  allocation_priority: number;
+  last_order_sync_at: string | null;
+  last_return_sync_at: string | null;
+  key_version: number;
+  created_at: string;
+  updated_at: string;
+  backfill_status: BackfillCursor | null;
+  budgets: ChannelBudgetRow[];
+};
+
 export type CandidateVariant = {
   variantId: string;
   sku: string;

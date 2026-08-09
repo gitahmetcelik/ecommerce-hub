@@ -1,6 +1,7 @@
 import { clearSession, readAccessToken, readRefreshToken, storeSession } from "./auth";
 import type {
   ChannelConnection,
+  ChannelConnectionDetail,
   ChannelPush,
   DlqRow,
   IntentRow,
@@ -145,6 +146,24 @@ export const api = {
 
   channels: {
     list: () => request<ChannelConnection[]>("/internal/channel-connections"),
+    get: (id: string) => request<ChannelConnectionDetail>(`/internal/channel-connections/${id}`),
+    create: (channelType: string, credentials: unknown) =>
+      request<{ id: string }>("/internal/channel-connections", {
+        method: "POST",
+        body: JSON.stringify({ channelType, credentials }),
+      }),
+    rotateCredentials: (id: string, credentials: unknown) =>
+      request<{ rotated: boolean }>(`/internal/channel-connections/${id}/credentials`, {
+        method: "PUT",
+        body: JSON.stringify({ credentials }),
+      }),
+    triggerBackfill: (id: string) =>
+      request<{ triggered: boolean }>(`/internal/channel-connections/${id}/backfill`, { method: "POST" }),
+    updateSettings: (id: string, reconcileIntervalMinutes?: number, allocationPriority?: number) =>
+      request<{ updated: boolean }>(`/internal/channel-connections/${id}/settings`, {
+        method: "PUT",
+        body: JSON.stringify({ reconcileIntervalMinutes, allocationPriority }),
+      }),
   },
 
   matching: {
