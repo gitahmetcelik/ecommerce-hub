@@ -35,6 +35,19 @@ public class StockMovement {
     @Column(name = "reference_id", updatable = false)
     private UUID referenceId;
 
+    // Plan v5 Faz 7 (V1008): populated only for a manual correction — every other
+    // reason (order, return, shipment) leaves all three null. adjustmentReason is kept
+    // as a string, not the enum, so a value stays readable even if StockAdjustmentReason
+    // ever loses a constant.
+    @Column(name = "adjustment_reason", updatable = false)
+    private String adjustmentReason;
+
+    @Column(updatable = false)
+    private String note;
+
+    @Column(name = "actor_user_id", updatable = false)
+    private UUID actorUserId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -45,12 +58,20 @@ public class StockMovement {
 
     public StockMovement(UUID id, UUID organizationId, UUID variantId, int quantity,
                           StockMovementReason reason, UUID referenceId) {
+        this(id, organizationId, variantId, quantity, reason, referenceId, null, null, null);
+    }
+
+    public StockMovement(UUID id, UUID organizationId, UUID variantId, int quantity, StockMovementReason reason,
+                          UUID referenceId, StockAdjustmentReason adjustmentReason, String note, UUID actorUserId) {
         this.id = id;
         this.organizationId = organizationId;
         this.variantId = variantId;
         this.quantity = quantity;
         this.reason = reason;
         this.referenceId = referenceId;
+        this.adjustmentReason = adjustmentReason == null ? null : adjustmentReason.name();
+        this.note = note;
+        this.actorUserId = actorUserId;
     }
 
     public UUID getId() {

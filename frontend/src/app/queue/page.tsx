@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -18,6 +19,7 @@ import { ConfirmDialog } from "@/components/hub/confirm-dialog";
 import { DecisionCard } from "@/components/hub/decision-card";
 import { EmptyState } from "@/components/hub/empty-state";
 import { PageHeader } from "@/components/data-table";
+import { Pagination } from "@/components/hub/pagination";
 import { RequireSession } from "@/components/require-session";
 import { api } from "@/lib/api";
 import { hasRole, type Session } from "@/lib/auth";
@@ -50,7 +52,13 @@ export default function QueuePage() {
  */
 function Queue({ session }: { session: Session }) {
   const queryClient = useQueryClient();
-  const queue = useQuery({ queryKey: ["operator-queue"], queryFn: api.operator.queue, refetchInterval: POLL_MS });
+  const [page, setPage] = useState(0);
+  const queue = useQuery({
+    queryKey: ["operator-queue", page],
+    queryFn: () => api.operator.queue({ page }),
+    refetchInterval: POLL_MS,
+    placeholderData: (previous) => previous,
+  });
 
   const canDecideReturns = hasRole(session, "OPERATOR");
 
@@ -85,7 +93,7 @@ function Queue({ session }: { session: Session }) {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const items = queue.data ?? [];
+  const items = queue.data?.items ?? [];
 
   return (
     <>
@@ -119,6 +127,9 @@ function Queue({ session }: { session: Session }) {
             />
           ))}
         </div>
+      )}
+      {queue.data && (
+        <Pagination page={queue.data.page} size={queue.data.size} total={queue.data.total} onPageChange={setPage} itemLabel="item" />
       )}
     </>
   );

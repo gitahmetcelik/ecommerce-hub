@@ -1,5 +1,13 @@
 /** Shapes returned by the hub's internal endpoints. Kept loose where the backend returns raw rows. */
 
+/** Plan v5 Faz 7 §7.2 point 5: every internal list endpoint returns this shape now. */
+export type PageResponse<T> = {
+  page: number;
+  size: number;
+  total: number;
+  items: T[];
+};
+
 export type LoginResponse = {
   accessToken: string;
   refreshToken: string;
@@ -128,4 +136,115 @@ export type ReturnItemRow = {
   quantity: number;
   intact_quantity: number | null;
   damaged_quantity: number | null;
+};
+
+/** One channel's view of a variant — Plan §U2/§U3's per-channel chip data. */
+export type VariantChannelSummary = {
+  channelConnectionId: string;
+  channelType: string;
+  channelVariantId: string;
+  status: string;
+  quantity: number | null;
+  generation: number | null;
+  updatedAt: string | null;
+  hasChannelPriceOverride: boolean;
+  consecutiveFailures: number;
+  errorReason: string | null;
+};
+
+export type VariantRow = {
+  id: string;
+  sku: string;
+  barcode: string | null;
+  sku_is_generated: boolean;
+  title: string;
+  on_hand: number;
+  reserved: number;
+  sellable: number;
+  list_price: string | number | null;
+  currency: string | null;
+  vat_rate: string | number | null;
+  channels: VariantChannelSummary[] | null;
+};
+
+export type StockMovementRow = {
+  id: string;
+  quantity: number;
+  reason: string;
+  adjustment_reason: string | null;
+  note: string | null;
+  actor_user_id: string | null;
+  reference_id: string | null;
+  created_at: string;
+};
+
+export type StockBufferRow = {
+  channel_connection_id: string;
+  buffer: number;
+  updated_at: string;
+};
+
+export type VariantDetail = VariantRow & {
+  damaged: number;
+  buffers: StockBufferRow[];
+  movements: StockMovementRow[];
+};
+
+export const STOCK_ADJUSTMENT_REASONS = [
+  "COUNT_DISCREPANCY",
+  "DAMAGE",
+  "LOSS",
+  "WAREHOUSE_RECEIPT",
+  "OTHER",
+] as const;
+export type StockAdjustmentReason = (typeof STOCK_ADJUSTMENT_REASONS)[number];
+
+/** Plan U7 (diagnostics, ADMIN-only): work_batch joined with its engine task — the only screen where "task"/"queue" vocabulary is allowed to surface. */
+export type TaskRow = {
+  work_batch_id: string;
+  task_type: string;
+  work_batch_status: string;
+  trace_id: string | null;
+  task_id: string | null;
+  task_status: string | null;
+  deneme_sayisi: number | null;
+  hata: string | null;
+};
+
+export type DlqRow = {
+  id: string;
+  gorev_id: string;
+  son_hata: string | null;
+  giris_zamani: string;
+  yeniden_gonderildi_mi: boolean;
+  task_type: string;
+  trace_id: string | null;
+};
+
+export type RawEventRow = {
+  id: string;
+  channel_connection_id: string;
+  channel_event_id: string;
+  received_at: string;
+  trace_id: string | null;
+};
+
+export type IntentRow = {
+  id: string;
+  type: string;
+  target_reference: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PriceDetail = {
+  listPrice: { list_price: string; currency: string; vat_rate: string; effective_from: string } | null;
+  channelPrices: {
+    channel_connection_id: string;
+    price: string;
+    discounted_price: string | null;
+    is_active: boolean;
+    updated_at: string;
+  }[];
 };

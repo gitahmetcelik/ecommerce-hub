@@ -4,6 +4,8 @@ import com.ecommercehub.domain.audit.AuditLogService;
 import com.ecommercehub.domain.auth.AuthenticatedUser;
 import com.ecommercehub.domain.auth.HubRole;
 import com.ecommercehub.domain.auth.InsufficientRoleException;
+import com.ecommercehub.domain.paging.PageRequest;
+import com.ecommercehub.domain.paging.PageResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,8 +64,10 @@ public class CatalogMatchingService {
      * so "which one is right" is always a real judgment call by the time it reaches this
      * screen, never a formality.
      */
-    public List<Map<String, Object>> pendingCandidatesWithDetails() {
-        return jdbcTemplate.queryForList("""
+    public PageResponse<Map<String, Object>> pendingCandidatesWithDetails(PageRequest pageRequest) {
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.mapping_candidate WHERE status = 'PENDING'", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT mc.id, mc.channel_connection_id, mc.channel_product_id, mc.channel_variant_id,
                        mc.barcode, mc.title, mc.status, mc.created_at,
                        (
@@ -80,8 +84,9 @@ public class CatalogMatchingService {
                            JOIN hub.product p ON p.id = v.product_id
                        ) AS candidates
                 FROM hub.mapping_candidate mc
-                WHERE mc.status = 'PENDING' ORDER BY mc.created_at LIMIT 200
-                """);
+                WHERE mc.status = 'PENDING' ORDER BY mc.created_at LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     /**

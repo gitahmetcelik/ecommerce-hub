@@ -35,6 +35,8 @@ public class AuditLogService {
     public static final String PRICE_LIST_SET = "PRICE_LIST_SET";
     public static final String PRICE_CHANNEL_SET = "PRICE_CHANNEL_SET";
     public static final String PRICE_CHANNEL_CLEARED = "PRICE_CHANNEL_CLEARED";
+    public static final String STOCK_MANUALLY_ADJUSTED = "STOCK_MANUALLY_ADJUSTED";
+    public static final String STOCK_BUFFER_SET = "STOCK_BUFFER_SET";
 
     private final NamedParameterJdbcTemplate systemJdbcTemplate;
     private final ObjectMapper objectMapper;

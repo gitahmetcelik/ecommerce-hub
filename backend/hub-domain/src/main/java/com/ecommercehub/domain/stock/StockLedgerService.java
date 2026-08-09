@@ -115,6 +115,33 @@ public class StockLedgerService {
         recordOnHandIncrease(organizationId, variantId, quantity, referenceId);
     }
 
+    /**
+     * Plan v5 §7.2 point 3 / §U5: an operator setting on_hand to a new absolute value,
+     * not a delta — the screen shows a count, not a movement. Written as ON_HAND_INCREASE/
+     * DECREASE, exactly like every other on_hand change (Plan §7.5: the nightly ledger
+     * replay in {@link StockConsistencyService} only knows those two reasons; inventing a
+     * third would make every manual correction a permanent phantom discrepancy). What
+     * makes it a manual correction is carried in the ledger row's own adjustmentReason/
+     * note/actor columns (V1008), not in a different {@code reason}.
+     *
+     * @param expectedOnHand what the operator's screen showed when they started — if the
+     *                       row has moved since, this throws {@link StockAdjustmentConflictException}
+     *                       rather than silently applying the new value's delta on top of
+     *                       a number nobody looked at (Plan §7.5's optimistic-lock gate)
+     */
+    @Transactional
+    public void recordManualAdjustment(UUID organizationId, UUID variantId, int expectedOnHand, int newOnHand,
+                                        StockAdjustmentReason reason, String note, UUID actorUserId, UUID referenceId) {
+        Stock stock = lockOrCreate(organizationId, variantId);
+        if (stock.getOnHand() != expectedOnHand) {
+            throw new StockAdjustmentConflictException(stock.getOnHand());
+        }
+
+        int delta = newOnHand - expectedOnHand;
+        StockMovementReason movementReason = delta >= 0 ? StockMovementReason.ON_HAND_INCREASE : StockMovementReason.ON_HAND_DECREASE;
+        apply(stock, delta, movementReason, referenceId, Stock::adjustOnHand, reason, note, actorUserId);
+    }
+
     private Stock lockOrCreate(UUID organizationId, UUID variantId) {
         return stockRepository.findByOrganizationIdAndVariantIdForUpdate(organizationId, variantId)
                 .orElseGet(() -> stockRepository.saveAndFlush(new Stock(UUID.randomUUID(), organizationId, variantId)));
@@ -122,6 +149,11 @@ public class StockLedgerService {
 
     private void apply(Stock stock, int signedDelta, StockMovementReason reason, UUID referenceId,
                         CounterAdjuster adjuster) {
+        apply(stock, signedDelta, reason, referenceId, adjuster, null, null, null);
+    }
+
+    private void apply(Stock stock, int signedDelta, StockMovementReason reason, UUID referenceId,
+                        CounterAdjuster adjuster, StockAdjustmentReason adjustmentReason, String note, UUID actorUserId) {
         adjuster.apply(stock, signedDelta);
 
         if (signedDelta != 0) {
@@ -130,7 +162,7 @@ public class StockLedgerService {
             // every reader to also know the reason to interpret the sign.
             stockMovementRepository.save(new StockMovement(
                     UUID.randomUUID(), stock.getOrganizationId(), stock.getVariantId(),
-                    Math.abs(signedDelta), reason, referenceId));
+                    Math.abs(signedDelta), reason, referenceId, adjustmentReason, note, actorUserId));
         }
 
         // Queued even when the delta was clamped to zero: an oversell means the channel

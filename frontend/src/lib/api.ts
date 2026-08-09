@@ -2,17 +2,35 @@ import { clearSession, readAccessToken, readRefreshToken, storeSession } from ".
 import type {
   ChannelConnection,
   ChannelPush,
+  DlqRow,
+  IntentRow,
   LoginResponse,
   MappingCandidate,
   OperatorQueueItem,
   OrderItem,
   OversellEvent,
+  PageResponse,
+  PriceDetail,
+  RawEventRow,
   ReturnDetail,
   ReturnItemRow,
   ReturnSummary,
   SalesOrder,
+  StockAdjustmentReason,
   StockDiscrepancy,
+  TaskRow,
+  VariantDetail,
+  VariantRow,
 } from "./types";
+
+/** Plan v5 Faz 7 §7.2 point 5: every list endpoint now takes a page. */
+export type ListParams = { page?: number; size?: number };
+
+function query(params: Record<string, string | number | boolean | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
+  if (entries.length === 0) return "";
+  return "?" + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
+}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -113,15 +131,16 @@ export const api = {
   },
 
   orders: {
-    list: () => request<SalesOrder[]>("/internal/orders"),
+    list: (params: ListParams = {}) => request<PageResponse<SalesOrder>>(`/internal/orders${query(params)}`),
     items: (salesOrderId: string) =>
       request<OrderItem[]>(`/internal/order-items?salesOrderId=${encodeURIComponent(salesOrderId)}`),
   },
 
   stock: {
-    pushes: () => request<ChannelPush[]>("/internal/channel-pushes"),
-    discrepancies: () => request<StockDiscrepancy[]>("/internal/stock-discrepancies"),
-    oversells: () => request<OversellEvent[]>("/internal/oversells"),
+    pushes: (params: ListParams = {}) => request<PageResponse<ChannelPush>>(`/internal/channel-pushes${query(params)}`),
+    discrepancies: (params: ListParams = {}) =>
+      request<PageResponse<StockDiscrepancy>>(`/internal/stock-discrepancies${query(params)}`),
+    oversells: (params: ListParams = {}) => request<PageResponse<OversellEvent>>(`/internal/oversells${query(params)}`),
   },
 
   channels: {
@@ -129,7 +148,8 @@ export const api = {
   },
 
   matching: {
-    candidates: () => request<MappingCandidate[]>("/internal/mapping-candidates"),
+    candidates: (params: ListParams = {}) =>
+      request<PageResponse<MappingCandidate>>(`/internal/mapping-candidates${query(params)}`),
     resolve: (candidateId: string, variantId: string) =>
       request<{ resolved: boolean }>(`/internal/mapping-candidates/${candidateId}/resolve`, {
         method: "POST",
@@ -142,7 +162,8 @@ export const api = {
   },
 
   operator: {
-    queue: () => request<OperatorQueueItem[]>("/internal/operator-queue"),
+    queue: (params: ListParams = {}) =>
+      request<PageResponse<OperatorQueueItem>>(`/internal/operator-queue${query(params)}`),
     dismiss: (id: string, reason: string) =>
       request<{ dismissed: boolean }>(`/internal/operator-queue/${id}/dismiss`, {
         method: "POST",
@@ -150,8 +171,53 @@ export const api = {
       }),
   },
 
+  variants: {
+    list: (params: ListParams & { q?: string; channelConnectionId?: string; stockStatus?: string; matchStatus?: string } = {}) =>
+      request<PageResponse<VariantRow>>(`/internal/variants${query(params)}`),
+    get: (id: string) => request<VariantDetail>(`/internal/variants/${id}`),
+    adjustStock: (
+      id: string,
+      body: { expectedOnHand: number; newOnHand: number; reason: StockAdjustmentReason; note: string },
+    ) =>
+      request<{ adjusted: boolean }>(`/internal/variants/${id}/stock-adjustment`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    setBuffer: (id: string, channelConnectionId: string, buffer: number) =>
+      request<{ buffer: number }>(`/internal/variants/${id}/buffer/${channelConnectionId}`, {
+        method: "POST",
+        body: JSON.stringify({ buffer }),
+      }),
+  },
+
+  prices: {
+    get: (variantId: string) => request<PriceDetail>(`/internal/prices?variantId=${encodeURIComponent(variantId)}`),
+    setListPrice: (variantId: string, amount: string, currency: string, vatRate: string) =>
+      request<{ variantId: string; listPrice: string }>(`/internal/prices/${variantId}/list-price`, {
+        method: "POST",
+        body: JSON.stringify({ amount, currency, vatRate }),
+      }),
+    setChannelPrice: (variantId: string, channelConnectionId: string, amount: string, discountedPrice: string | null) =>
+      request<{ variantId: string; channelConnectionId: string; price: string }>(
+        `/internal/prices/${variantId}/channel-price/${channelConnectionId}`,
+        { method: "POST", body: JSON.stringify({ amount, discountedPrice }) },
+      ),
+    clearChannelPrice: (variantId: string, channelConnectionId: string) =>
+      request<{ cleared: boolean }>(`/internal/prices/${variantId}/channel-price/${channelConnectionId}`, {
+        method: "DELETE",
+      }),
+  },
+
+  diagnostics: {
+    tasks: (traceId?: string) => request<TaskRow[]>(`/internal/tasks${query({ traceId })}`),
+    dlq: (params: ListParams & { traceId?: string } = {}) =>
+      request<PageResponse<DlqRow>>(`/internal/dlq${query(params)}`),
+    rawEvents: (traceId?: string) => request<RawEventRow[]>(`/internal/raw-events${query({ traceId })}`),
+    intents: () => request<IntentRow[]>("/internal/intents"),
+  },
+
   returns: {
-    list: () => request<ReturnSummary[]>("/internal/returns"),
+    list: (params: ListParams = {}) => request<PageResponse<ReturnSummary>>(`/internal/returns${query(params)}`),
     get: (id: string) => request<ReturnDetail>(`/internal/returns/${id}`),
     items: (id: string) => request<ReturnItemRow[]>(`/internal/returns/${id}/items`),
     approve: (id: string) => request<ReturnDetail>(`/internal/returns/${id}/approve`, { method: "POST" }),

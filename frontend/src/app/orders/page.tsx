@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { DataTable, PageHeader, type Column } from "@/components/data-table";
+import { Pagination } from "@/components/hub/pagination";
 import { RequireSession } from "@/components/require-session";
 import { api } from "@/lib/api";
 import type { OrderItem, SalesOrder } from "@/lib/types";
@@ -32,11 +33,13 @@ export default function OrdersPage() {
 
 function Orders() {
   const [selected, setSelected] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
 
   const orders = useQuery({
-    queryKey: ["orders"],
-    queryFn: api.orders.list,
+    queryKey: ["orders", page],
+    queryFn: () => api.orders.list({ page }),
     refetchInterval: POLL_MS,
+    placeholderData: (previous) => previous,
   });
 
   const items = useQuery({
@@ -62,12 +65,15 @@ function Orders() {
       {orders.isError && <p className="mb-4 text-sm text-destructive">{(orders.error as Error).message}</p>}
 
       <DataTable
-        rows={orders.data}
+        rows={orders.data?.items}
         columns={columns(setSelected)}
         empty="No orders yet."
         testId="orders-table"
         rowKey={(row) => row.id}
       />
+      {orders.data && (
+        <Pagination page={orders.data.page} size={orders.data.size} total={orders.data.total} onPageChange={setPage} itemLabel="order" />
+      )}
 
       {selected && (
         <section className="mt-8">

@@ -1,7 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { DataTable, PageHeader, type Column } from "@/components/data-table";
+import { Pagination } from "@/components/hub/pagination";
 import { RequireSession } from "@/components/require-session";
 import { api } from "@/lib/api";
 import type { ChannelPush, OversellEvent, StockDiscrepancy } from "@/lib/types";
@@ -13,13 +15,28 @@ export default function StockPage() {
 }
 
 function Stock() {
-  const pushes = useQuery({ queryKey: ["pushes"], queryFn: api.stock.pushes, refetchInterval: POLL_MS });
-  const discrepancies = useQuery({
-    queryKey: ["discrepancies"],
-    queryFn: api.stock.discrepancies,
+  const [pushesPage, setPushesPage] = useState(0);
+  const [discrepanciesPage, setDiscrepanciesPage] = useState(0);
+  const [oversellsPage, setOversellsPage] = useState(0);
+
+  const pushes = useQuery({
+    queryKey: ["pushes", pushesPage],
+    queryFn: () => api.stock.pushes({ page: pushesPage }),
     refetchInterval: POLL_MS,
+    placeholderData: (previous) => previous,
   });
-  const oversells = useQuery({ queryKey: ["oversells"], queryFn: api.stock.oversells, refetchInterval: POLL_MS });
+  const discrepancies = useQuery({
+    queryKey: ["discrepancies", discrepanciesPage],
+    queryFn: () => api.stock.discrepancies({ page: discrepanciesPage }),
+    refetchInterval: POLL_MS,
+    placeholderData: (previous) => previous,
+  });
+  const oversells = useQuery({
+    queryKey: ["oversells", oversellsPage],
+    queryFn: () => api.stock.oversells({ page: oversellsPage }),
+    refetchInterval: POLL_MS,
+    placeholderData: (previous) => previous,
+  });
 
   const pushColumns: Column<ChannelPush>[] = [
     { key: "variant", header: "Variant", render: (row) => row.variant_id.slice(0, 8) },
@@ -60,34 +77,55 @@ function Stock() {
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Pending pushes</h2>
         <DataTable
-          rows={pushes.data}
+          rows={pushes.data?.items}
           columns={pushColumns}
           empty="Nothing queued — every channel is up to date."
           testId="pushes-table"
           rowKey={(row) => row.id}
         />
+        {pushes.data && (
+          <Pagination page={pushes.data.page} size={pushes.data.size} total={pushes.data.total} onPageChange={setPushesPage} itemLabel="push" />
+        )}
       </section>
 
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Open discrepancies</h2>
         <DataTable
-          rows={discrepancies.data}
+          rows={discrepancies.data?.items}
           columns={discrepancyColumns}
           empty="No drift reported."
           testId="discrepancies-table"
           rowKey={(row) => row.id}
         />
+        {discrepancies.data && (
+          <Pagination
+            page={discrepancies.data.page}
+            size={discrepancies.data.size}
+            total={discrepancies.data.total}
+            onPageChange={setDiscrepanciesPage}
+            itemLabel="discrepancy"
+          />
+        )}
       </section>
 
       <section>
         <h2 className="mb-3 text-lg font-medium">Oversells</h2>
         <DataTable
-          rows={oversells.data}
+          rows={oversells.data?.items}
           columns={oversellColumns}
           empty="No sale has outrun its stock."
           testId="oversells-table"
           rowKey={(row) => row.id}
         />
+        {oversells.data && (
+          <Pagination
+            page={oversells.data.page}
+            size={oversells.data.size}
+            total={oversells.data.total}
+            onPageChange={setOversellsPage}
+            itemLabel="oversell"
+          />
+        )}
       </section>
     </>
   );

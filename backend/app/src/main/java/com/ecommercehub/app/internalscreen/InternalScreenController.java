@@ -4,6 +4,8 @@ import com.ecommercehub.app.security.CurrentUser;
 import com.ecommercehub.domain.auth.HubRole;
 import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.customer.CustomerErasureService;
+import com.ecommercehub.domain.paging.PageRequest;
+import com.ecommercehub.domain.paging.PageResponse;
 import com.ecommercehub.domain.queue.OperatorQueueService;
 import com.ecommercehub.domain.tenant.TenantContextService;
 import org.springframework.context.annotation.Profile;
@@ -54,12 +56,16 @@ public class InternalScreenController {
 
     @GetMapping("/internal/orders")
     @Transactional
-    public List<Map<String, Object>> orders() {
+    public PageResponse<Map<String, Object>> orders(@RequestParam(required = false) Integer page,
+                                                      @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Long total = jdbcTemplate.queryForObject("SELECT count(*) FROM hub.sales_order", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT id, channel_order_number, derived_status, total, currency, created_at, updated_at
-                FROM hub.sales_order ORDER BY created_at DESC LIMIT 200
-                """);
+                FROM hub.sales_order ORDER BY created_at DESC LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     @GetMapping("/internal/order-items")
@@ -72,10 +78,18 @@ public class InternalScreenController {
                 """, new MapSqlParameterSource("salesOrderId", salesOrderId));
     }
 
+    /** Plan U7 (diagnostics, ADMIN-only): trace_id narrows the raw events on the ingest side of a single event's journey. */
     @GetMapping("/internal/raw-events")
     @Transactional
-    public List<Map<String, Object>> rawEvents() {
+    public List<Map<String, Object>> rawEvents(@RequestParam(required = false) String traceId) {
+        CurrentUser.requireRole(HubRole.ADMIN);
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
+        if (traceId != null && !traceId.isBlank()) {
+            return namedJdbcTemplate.queryForList("""
+                    SELECT id, channel_connection_id, channel_event_id, received_at, trace_id
+                    FROM hub.raw_event WHERE trace_id = :traceId ORDER BY received_at DESC LIMIT 200
+                    """, new MapSqlParameterSource("traceId", traceId));
+        }
         return jdbcTemplate.queryForList("""
                 SELECT id, channel_connection_id, channel_event_id, received_at, trace_id
                 FROM hub.raw_event ORDER BY received_at DESC LIMIT 200
@@ -85,6 +99,7 @@ public class InternalScreenController {
     @GetMapping("/internal/intents")
     @Transactional
     public List<Map<String, Object>> intents() {
+        CurrentUser.requireRole(HubRole.ADMIN);
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
         return jdbcTemplate.queryForList("""
                 SELECT id, type, target_reference, status, created_at, updated_at
@@ -101,9 +116,13 @@ public class InternalScreenController {
      */
     @GetMapping("/internal/operator-queue")
     @Transactional
-    public List<Map<String, Object>> operatorQueue() {
+    public PageResponse<Map<String, Object>> operatorQueue(@RequestParam(required = false) Integer page,
+                                                             @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.operator_queue WHERE status = 'PENDING'", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT oq.id, oq.type, oq.description, oq.reference_id, oq.status, oq.created_at,
                        rr.timeout_at AS deadline_at
                 FROM hub.operator_queue oq
@@ -111,8 +130,9 @@ public class InternalScreenController {
                        ON oq.type = 'RETURN_APPROVAL' AND rr.id = oq.reference_id
                 WHERE oq.status = 'PENDING'
                 ORDER BY (rr.timeout_at IS NULL), rr.timeout_at ASC, oq.created_at ASC
-                LIMIT 200
-                """);
+                LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     public record DismissQueueItemRequest(String reason) {
@@ -133,8 +153,18 @@ public class InternalScreenController {
      */
     @GetMapping("/internal/tasks")
     @Transactional
-    public List<Map<String, Object>> tasks() {
+    public List<Map<String, Object>> tasks(@RequestParam(required = false) String traceId) {
+        CurrentUser.requireRole(HubRole.ADMIN);
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
+        if (traceId != null && !traceId.isBlank()) {
+            return namedJdbcTemplate.queryForList("""
+                    SELECT wb.id AS work_batch_id, wb.task_type, wb.status AS work_batch_status,
+                           wb.trace_id, g.id AS task_id, g.durum AS task_status, g.deneme_sayisi, g.hata
+                    FROM hub.work_batch wb
+                    LEFT JOIN motor.gorevler g ON g.id = wb.task_id
+                    WHERE wb.trace_id = :traceId ORDER BY wb.created_at DESC LIMIT 200
+                    """, new MapSqlParameterSource("traceId", traceId));
+        }
         return jdbcTemplate.queryForList("""
                 SELECT wb.id AS work_batch_id, wb.task_type, wb.status AS work_batch_status,
                        wb.trace_id, g.id AS task_id, g.durum AS task_status, g.deneme_sayisi, g.hata
@@ -147,9 +177,10 @@ public class InternalScreenController {
     /** Plan Phase 3: the operator matching screen — see CatalogMatchingService.pendingCandidatesWithDetails. */
     @GetMapping("/internal/mapping-candidates")
     @Transactional
-    public List<Map<String, Object>> mappingCandidates() {
+    public PageResponse<Map<String, Object>> mappingCandidates(@RequestParam(required = false) Integer page,
+                                                                 @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return catalogMatchingService.pendingCandidatesWithDetails();
+        return catalogMatchingService.pendingCandidatesWithDetails(PageRequest.of(page, size));
     }
 
     /**
@@ -186,35 +217,48 @@ public class InternalScreenController {
      */
     @GetMapping("/internal/channel-pushes")
     @Transactional
-    public List<Map<String, Object>> channelPushes() {
+    public PageResponse<Map<String, Object>> channelPushes(@RequestParam(required = false) Integer page,
+                                                             @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Long total = jdbcTemplate.queryForObject("SELECT count(*) FROM hub.channel_push", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT id, channel_connection_id, variant_id, type, target_value, generation, status,
                        last_attempt_at, updated_at
-                FROM hub.channel_push ORDER BY updated_at DESC LIMIT 200
-                """);
+                FROM hub.channel_push ORDER BY updated_at DESC LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     /** Plan §11: what reconcile found and deliberately did not fix. */
     @GetMapping("/internal/stock-discrepancies")
     @Transactional
-    public List<Map<String, Object>> stockDiscrepancies() {
+    public PageResponse<Map<String, Object>> stockDiscrepancies(@RequestParam(required = false) Integer page,
+                                                                  @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM hub.stock_discrepancy WHERE resolved = false", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT id, channel_connection_id, variant_id, type, expected, actual, resolved, updated_at
-                FROM hub.stock_discrepancy WHERE resolved = false ORDER BY updated_at DESC LIMIT 200
-                """);
+                FROM hub.stock_discrepancy WHERE resolved = false ORDER BY updated_at DESC LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     /** Plan §3: sales we could not back with stock. */
     @GetMapping("/internal/oversells")
     @Transactional
-    public List<Map<String, Object>> oversells() {
+    public PageResponse<Map<String, Object>> oversells(@RequestParam(required = false) Integer page,
+                                                         @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Long total = jdbcTemplate.queryForObject("SELECT count(*) FROM hub.oversell_event", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT id, channel_connection_id, variant_id, requested, available, created_at
-                FROM hub.oversell_event ORDER BY created_at DESC LIMIT 200
-                """);
+                FROM hub.oversell_event ORDER BY created_at DESC LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     /** Plan Phase 4: connection health — circuit state and why it was last tripped. */
@@ -255,15 +299,28 @@ public class InternalScreenController {
      */
     @GetMapping("/internal/dlq")
     @Transactional
-    public List<Map<String, Object>> deadLetterQueue() {
+    public PageResponse<Map<String, Object>> deadLetterQueue(@RequestParam(required = false) Integer page,
+                                                               @RequestParam(required = false) Integer size,
+                                                               @RequestParam(required = false) String traceId) {
         CurrentUser.requireRole(HubRole.ADMIN);
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("limit", pageRequest.size()).addValue("offset", pageRequest.offset());
+        String where = "";
+        if (traceId != null && !traceId.isBlank()) {
+            where = " WHERE wb.trace_id = :traceId ";
+            params.addValue("traceId", traceId);
+        }
+        Long total = namedJdbcTemplate.queryForObject("""
+                SELECT count(*) FROM motor.olu_mektup_kutusu d JOIN hub.work_batch wb ON wb.task_id = d.gorev_id
+                """ + where, params, Long.class);
+        List<Map<String, Object>> items = namedJdbcTemplate.queryForList("""
                 SELECT d.id, d.gorev_id, d.son_hata, d.giris_zamani, d.yeniden_gonderildi_mi,
                        wb.task_type, wb.trace_id
                 FROM motor.olu_mektup_kutusu d
                 JOIN hub.work_batch wb ON wb.task_id = d.gorev_id
-                ORDER BY d.giris_zamani DESC LIMIT 200
-                """);
+                """ + where + " ORDER BY d.giris_zamani DESC LIMIT :limit OFFSET :offset", params);
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 }

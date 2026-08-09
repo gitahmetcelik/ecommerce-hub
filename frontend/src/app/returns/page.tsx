@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable, PageHeader, type Column } from "@/components/data-table";
+import { Pagination } from "@/components/hub/pagination";
 import { RequireSession } from "@/components/require-session";
 import { api } from "@/lib/api";
 import { hasRole, type Session } from "@/lib/auth";
@@ -18,8 +19,14 @@ export default function ReturnsPage() {
 function Returns({ session }: { session: Session }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
 
-  const returns = useQuery({ queryKey: ["returns"], queryFn: api.returns.list, refetchInterval: POLL_MS });
+  const returns = useQuery({
+    queryKey: ["returns", page],
+    queryFn: () => api.returns.list({ page }),
+    refetchInterval: POLL_MS,
+    placeholderData: (previous) => previous,
+  });
 
   const canDecide = hasRole(session, "OPERATOR");
   const canRefund = hasRole(session, "ADMIN");
@@ -132,12 +139,15 @@ function Returns({ session }: { session: Session }) {
       />
 
       <DataTable
-        rows={returns.data}
+        rows={returns.data?.items}
         columns={columns}
         empty="No returns."
         testId="returns-table"
         rowKey={(row) => row.id}
       />
+      {returns.data && (
+        <Pagination page={returns.data.page} size={returns.data.size} total={returns.data.total} onPageChange={setPage} itemLabel="return" />
+      )}
 
       {selected && <ReceiptPanel returnRequestId={selected} onDone={refresh} />}
     </>

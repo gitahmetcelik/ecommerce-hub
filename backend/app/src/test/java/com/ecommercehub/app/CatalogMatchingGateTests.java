@@ -7,6 +7,7 @@ import com.ecommercehub.domain.catalog.CatalogMatchingService;
 import com.ecommercehub.domain.order.OrderEventPayload;
 import com.ecommercehub.domain.order.OrderItemStatus;
 import com.ecommercehub.domain.order.OrderProcessingService;
+import com.ecommercehub.domain.paging.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -230,7 +231,7 @@ public class CatalogMatchingGateTests extends AbstractTestcontainersTest {
 
         catalogMatchingService.resolve(orgId, channelConnectionId, "cp", "cv-detail-test", "NO-MATCH", "SHARED-DETAIL", "title");
 
-        List<Map<String, Object>> rows = catalogMatchingService.pendingCandidatesWithDetails();
+        List<Map<String, Object>> rows = catalogMatchingService.pendingCandidatesWithDetails(new PageRequest(0, 50)).items();
         Map<String, Object> row = rows.stream()
                 .filter(r -> "cv-detail-test".equals(r.get("channel_variant_id")))
                 .findFirst()

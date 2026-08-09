@@ -36,8 +36,11 @@ function channelLabel(item: MappingCandidate): string {
 function Matching({ session }: { session: Session }) {
   const queryClient = useQueryClient();
   const candidates = useQuery({
+    // One-at-a-time review workflow (Plan §U1's matching workspace), not a browsed
+    // list — a wide single page preserves the pre-Faz-7 behavior instead of adding
+    // prev/next controls that would fight the keyboard-driven flow below.
     queryKey: ["mapping-candidates"],
-    queryFn: api.matching.candidates,
+    queryFn: () => api.matching.candidates({ size: 200 }),
     refetchInterval: 5000,
   });
 
@@ -47,7 +50,7 @@ function Matching({ session }: { session: Session }) {
   const [manualVariantId, setManualVariantId] = useState("");
 
   const visible = useMemo(
-    () => (candidates.data ?? []).filter((c) => c.id !== pending?.id),
+    () => (candidates.data?.items ?? []).filter((c) => c.id !== pending?.id),
     [candidates.data, pending],
   );
   const current = visible[Math.min(currentIndex, Math.max(0, visible.length - 1))];

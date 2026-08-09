@@ -2,6 +2,8 @@ package com.ecommercehub.app.returns;
 
 import com.ecommercehub.app.security.CurrentUser;
 import com.ecommercehub.domain.auth.InsufficientRoleException;
+import com.ecommercehub.domain.paging.PageRequest;
+import com.ecommercehub.domain.paging.PageResponse;
 import com.ecommercehub.domain.returns.ReturnPayment;
 import com.ecommercehub.domain.returns.ReturnRequest;
 import com.ecommercehub.domain.returns.ReturnService;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -65,14 +68,18 @@ public class ReturnController {
     /** The operator's work list: open returns first, because those are the ones needing a decision. */
     @GetMapping
     @Transactional
-    public List<Map<String, Object>> list() {
+    public PageResponse<Map<String, Object>> list(@RequestParam(required = false) Integer page,
+                                                    @RequestParam(required = false) Integer size) {
         tenantContextService.setTransactionTenantContext(CurrentUser.organizationId());
-        return jdbcTemplate.queryForList("""
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Long total = jdbcTemplate.queryForObject("SELECT count(*) FROM hub.return_request", Long.class);
+        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                 SELECT id, status, sales_order_id, channel_return_id, reason, timeout_at, created_at
                 FROM hub.return_request
                 ORDER BY (status IN ('AWAITING_APPROVAL', 'TIMED_OUT')) DESC, created_at DESC
-                LIMIT 200
-                """);
+                LIMIT ? OFFSET ?
+                """, pageRequest.size(), pageRequest.offset());
+        return PageResponse.of(pageRequest, total == null ? 0 : total, items);
     }
 
     @GetMapping("/{returnRequestId}")
